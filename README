@@ -1,0 +1,10 @@
+If device cannot be listed unload default linux drivers:
+
+
+Unplug usb cable
+sudo rmmod ftdi_sio
+sudo rmmod usbserial
+plug usb cable
+
+
+Application must be run as sudo.

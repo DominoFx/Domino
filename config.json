@@ -1,0 +1,34 @@
+{
+	"dataIn" : 
+	[
+		{
+			"name" : "channel",
+			"type" : "number"
+		},
+		{
+			"name" : "value",
+			"type" : "number"
+		},
+		{
+			"name" : "speed",
+			"type" : "number"
+		},
+		{
+			"name" : "normalizedValue",
+			"type" : "number"
+		},
+		{
+			"name" : "id",
+			"type" : "text"
+		},
+		{
+			"name" : "presence",
+			"type" : "number"
+		}
+	],
+	"dataOut" : [],
+	"id" : "857a3eec-b2ee-473a-aa09-6090856d6d6c",
+	"name" : "DMX Node",
+	"parameters" : [],
+	"serverUri" : "ws://127.0.0.1:9002"
+}
