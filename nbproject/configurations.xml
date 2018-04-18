@@ -10,6 +10,32 @@
       <itemPath>dmx/rs232.h</itemPath>
       <itemPath>dmx/types.h</itemPath>
     </logicalFolder>
+    <logicalFolder name="ip" displayName="ip" projectFiles="true">
+      <logicalFolder name="posix" displayName="posix" projectFiles="true">
+        <itemPath>ip/posix/NetworkingUtils.cpp</itemPath>
+        <itemPath>ip/posix/UdpSocket.cpp</itemPath>
+      </logicalFolder>
+      <itemPath>ip/IpEndpointName.cpp</itemPath>
+      <itemPath>ip/IpEndpointName.h</itemPath>
+      <itemPath>ip/NetworkingUtils.h</itemPath>
+      <itemPath>ip/PacketListener.h</itemPath>
+      <itemPath>ip/TimerListener.h</itemPath>
+      <itemPath>ip/UdpSocket.h</itemPath>
+    </logicalFolder>
+    <logicalFolder name="osc" displayName="osc" projectFiles="true">
+      <itemPath>osc/MessageMappingOscPacketListener.h</itemPath>
+      <itemPath>osc/OscException.h</itemPath>
+      <itemPath>osc/OscHostEndianness.h</itemPath>
+      <itemPath>osc/OscOutboundPacketStream.cpp</itemPath>
+      <itemPath>osc/OscOutboundPacketStream.h</itemPath>
+      <itemPath>osc/OscPacketListener.h</itemPath>
+      <itemPath>osc/OscPrintReceivedElements.cpp</itemPath>
+      <itemPath>osc/OscPrintReceivedElements.h</itemPath>
+      <itemPath>osc/OscReceivedElements.cpp</itemPath>
+      <itemPath>osc/OscReceivedElements.h</itemPath>
+      <itemPath>osc/OscTypes.cpp</itemPath>
+      <itemPath>osc/OscTypes.h</itemPath>
+    </logicalFolder>
     <logicalFolder name="ResourceFiles"
                    displayName="Resource Files"
                    projectFiles="true">
@@ -35,6 +61,10 @@
       <itemPath>Makefile</itemPath>
     </logicalFolder>
   </logicalFolder>
+  <sourceRootList>
+    <Elem>ip</Elem>
+    <Elem>osc</Elem>
+  </sourceRootList>
   <projectmakefile>Makefile</projectmakefile>
   <confs>
     <conf name="Debug" type="1">
@@ -55,7 +85,7 @@
           <linkerLibItems>
             <linkerLibFileItem>/usr/local/lib/libboost_system.so.1.62.0</linkerLibFileItem>
           </linkerLibItems>
-          <commandLine>-lwiringPi -pthread</commandLine>
+          <commandLine>-lwiringPi -pthread -lusb</commandLine>
         </linkerTool>
       </compileType>
       <item path="../jsoncpp/jsoncpp.cpp" ex="false" tool="1" flavor2="0">
@@ -76,7 +106,50 @@
       </item>
       <item path="dmx/types.h" ex="false" tool="3" flavor2="0">
       </item>
+      <item path="ip/IpEndpointName.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="ip/IpEndpointName.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="ip/NetworkingUtils.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="ip/PacketListener.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="ip/TimerListener.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="ip/UdpSocket.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="ip/posix/NetworkingUtils.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="ip/posix/UdpSocket.cpp" ex="false" tool="1" flavor2="0">
+      </item>
       <item path="main.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="osc/MessageMappingOscPacketListener.h"
+            ex="false"
+            tool="3"
+            flavor2="0">
+      </item>
+      <item path="osc/OscException.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="osc/OscHostEndianness.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="osc/OscOutboundPacketStream.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="osc/OscOutboundPacketStream.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="osc/OscPacketListener.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="osc/OscPrintReceivedElements.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="osc/OscPrintReceivedElements.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="osc/OscReceivedElements.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="osc/OscReceivedElements.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="osc/OscTypes.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="osc/OscTypes.h" ex="false" tool="3" flavor2="0">
       </item>
     </conf>
     <conf name="Release" type="1">
@@ -107,7 +180,7 @@
           <linkerLibItems>
             <linkerLibFileItem>/usr/local/lib/libboost_system.so.1.62.0</linkerLibFileItem>
           </linkerLibItems>
-          <commandLine>-lwiringPi -pthread</commandLine>
+          <commandLine>-lwiringPi -pthread -lusb</commandLine>
         </linkerTool>
       </compileType>
       <item path="../jsoncpp/jsoncpp.cpp" ex="false" tool="1" flavor2="0">
@@ -128,7 +201,50 @@
       </item>
       <item path="dmx/types.h" ex="false" tool="3" flavor2="0">
       </item>
+      <item path="ip/IpEndpointName.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="ip/IpEndpointName.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="ip/NetworkingUtils.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="ip/PacketListener.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="ip/TimerListener.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="ip/UdpSocket.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="ip/posix/NetworkingUtils.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="ip/posix/UdpSocket.cpp" ex="false" tool="1" flavor2="0">
+      </item>
       <item path="main.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="osc/MessageMappingOscPacketListener.h"
+            ex="false"
+            tool="3"
+            flavor2="0">
+      </item>
+      <item path="osc/OscException.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="osc/OscHostEndianness.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="osc/OscOutboundPacketStream.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="osc/OscOutboundPacketStream.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="osc/OscPacketListener.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="osc/OscPrintReceivedElements.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="osc/OscPrintReceivedElements.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="osc/OscReceivedElements.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="osc/OscReceivedElements.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="osc/OscTypes.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="osc/OscTypes.h" ex="false" tool="3" flavor2="0">
       </item>
     </conf>
   </confs>

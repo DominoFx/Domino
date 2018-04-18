@@ -10,6 +10,186 @@
 
 #define DMX_CONFIG_FILENAME "dmxconfig.json"
 
+///Vellman
+
+#include <usb.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <sys/types.h>
+#include <sys/time.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <string.h>
+
+#include "osc/OscOutboundPacketStream.h"
+#include "ip/UdpSocket.h"
+
+#define ADDRESS "127.0.0.1"
+#define PORT 7000
+
+#define OUTPUT_BUFFER_SIZE 1024
+
+UdpTransmitSocket transmitSocket( IpEndpointName( ADDRESS, PORT ) );
+
+struct usb_bus *bus;
+struct usb_device *dev;
+usb_dev_handle *udev;
+int *channels;
+int *maxchannel;
+int *shutdown;
+int *caps;
+int *shm;
+int shmid;
+
+void write_command ( unsigned char *data )
+{
+  usb_interrupt_write(udev,0x1,(char*)data,8,20);
+}
+
+void sendDMX()
+{
+  int i, n;
+  unsigned char data[8];
+  int m;
+
+  m=*maxchannel;
+  for (i=0;(i<100) && !channels[i] && (i < m - 6);i++); 
+
+  data[0] = 4; /* Start of data, number of leading 0 and 6 channels */
+  data[1] = i+1;
+  data[2] = channels[i];
+  data[3] = channels[i+1];
+  data[4] = channels[i+2];
+  data[5] = channels[i+3];
+  data[6] = channels[i+4];
+  data[7] = channels[i+5];
+  write_command(data);
+  i+=6;
+
+  while (i < m - 7) {
+    if (!channels[i]) {
+      for(n=i+1;(n < m - 6) && (n-i<100) && !channels[n] ;n++) {
+        data[0] = 5;
+        data[1] = n-i;
+	data[2] = channels[n];
+	data[3] = channels[n+1];
+	data[4] = channels[n+2];
+	data[5] = channels[n+3];
+	data[6] = channels[n+4];
+	data[7] = channels[n+5];
+	write_command(data);
+	i=n+6;
+      }
+    } else {
+      data[0] = 2; /* 7 channels */
+      data[1] = channels[i];
+      data[2] = channels[i+1];
+      data[3] = channels[i+2];
+      data[4] = channels[i+3];
+      data[5] = channels[i+4];
+      data[6] = channels[i+5];
+      data[7] = channels[i+6];
+      write_command(data);
+      i+=7;
+    }
+  }
+  
+  for(;i < m;i++) {
+    data[0] = 3; /* send one channel */
+    data[1] = channels[i];
+    write_command(data);
+  }
+}
+
+int initUSB()
+{
+  int count = 0;
+
+  usb_init();
+  usb_find_busses();
+  usb_find_devices();
+
+  for (bus = usb_busses; bus; bus = bus->next) {
+    for (dev = bus->devices; dev; dev = dev->next) {
+      if ( (dev->descriptor.idVendor == 0x10cf) &&
+           (dev->descriptor.idProduct == 0x8062 ) ) {
+           udev=usb_open(dev);
+#if defined(LIBUSB_HAS_GET_DRIVER_NP) && defined(LIBUSB_HAS_DETACH_KERNEL_DRIVER_NP)
+           usb_detach_kernel_driver_np( udev, 0);
+#endif
+           usb_set_configuration(udev, 1);
+           usb_claim_interface(udev, 0);
+           return 1;
+      }
+    }
+  }
+  return 0;
+}
+
+void initSHM()
+{
+    
+    shmid=shmget(0x56444D58,sizeof(int)*522,IPC_CREAT | 0666);
+    shm=(int *)shmat(shmid,NULL,0);
+    memset(shm,0,sizeof(int)*522);
+    maxchannel=shm;
+    shutdown=shm+1;
+    caps=shm+2;
+    channels=shm+10;
+    *shutdown=0; /* Run mode */
+    *caps=0; /* Services available flags */
+    *maxchannel=6;
+}
+
+void release()
+{
+    usb_close(udev);
+    shmdt(shm);
+    shmctl(shmid,IPC_RMID,NULL);
+}
+
+void timediff(struct timeval *res, struct timeval *a, struct timeval *b) {
+    long sec,usec;
+    sec=a->tv_sec-b->tv_sec;
+    usec=a->tv_usec-b->tv_usec;
+    while (usec<0) {
+        usec+=1000000;
+        sec--;
+    }
+    if (sec<0) {
+	res->tv_sec=0;
+	res->tv_usec=0;
+    } else {
+	res->tv_sec=sec;
+	res->tv_usec=usec;
+    }
+}
+
+void timeadd(struct timeval *res, struct timeval *a, struct timeval *b) {
+    res->tv_usec=a->tv_usec+b->tv_usec;
+    res->tv_sec=a->tv_sec+b->tv_sec;
+    while (res->tv_usec >= 1000000) {
+	res->tv_usec-=1000000;
+	res->tv_sec;
+    }
+}
+
+bool InitVellman()
+{
+    struct timeval now,next,diff,delay;
+
+    if (initUSB())
+    {
+	initSHM();
+        
+        return true;
+    }
+    
+    return false;
+}
+
+//Vellman end
+
 DmxController::DmxController():
 m_continuousSend(true)
 ,m_continuousDelay(1.0f / 15.0f)//Default to 15fps
@@ -17,6 +197,8 @@ m_continuousSend(true)
 ,m_presenceTransitionSpeed(128)
 ,m_presenceThreshold(0.0f)
 ,m_fd(-1)
+,m_DMXInterface(NULL)
+,m_initialized(false)
 {
     m_value = 0;
     m_maxValue = 127;
@@ -56,6 +238,10 @@ bool DmxController::Init()
             if(dmxInterfaceString == "open")
             {
                 dmxInterface = OPEN_DMX_USB;
+            }
+            else if(dmxInterfaceString == "vellman")
+            {
+                dmxInterface = VELLMAN;
             }
         }
         
@@ -126,18 +312,25 @@ bool DmxController::Init()
         }
     }
         
-    m_DMXInterface = new EnttecDMXUSB(dmxInterface, dmxDevice);
+    if(dmxInterface != VELLMAN)
+    {
+        m_DMXInterface = new EnttecDMXUSB(dmxInterface, dmxDevice);
+    }
+    else
+    {
+        if(InitVellman())
+        {
+            m_initialized = true;
+        }
+    }
     
-    if(m_DMXInterface->IsAvailable())
+    
+    if(m_DMXInterface && m_DMXInterface->IsAvailable())
     {
         m_DMXInterface->ResetCanauxDMX();
         m_DMXInterface->SetCanalDMX(1, 255);
         m_DMXInterface->SendDMX();
         m_initialized = true;
-    }
-    else
-    {
-        m_initialized = false;
     }
     
     m_lastUpdate = std::chrono::system_clock::now();
@@ -286,7 +479,7 @@ void DmxController::Apply(const Json::Value& msgData)
         }
     }
     
-    if(send && !m_continuousSend)
+    if(m_DMXInterface && send && !m_continuousSend)
     {
         m_DMXInterface->SendDMX();
     }
@@ -294,6 +487,11 @@ void DmxController::Apply(const Json::Value& msgData)
 
 void DmxController::Set(int channel, int value, int speed /* = 0*/)
 {
+    if(!m_DMXInterface)
+    {
+        return;
+    }
+    
     if(m_debugOutput)
     {
         fprintf(stderr, "Setting channel: %d -> %d\n", channel, value);
@@ -435,10 +633,18 @@ void DmxController::Update()
             }
         }
         
-        m_DMXInterface->SetCanalDMX(1, m_value);
+        //channels[0] = m_value;
+        //channels[1] = 255;
+        //channels[2] = 255;
+        //channels[3] = 255;
+        //sendDMX();
         
-        m_DMXInterface->SendDMX();
-	*/
+        if(m_DMXInterface)
+        {
+            m_DMXInterface->SetCanalDMX(1, m_value);
+        
+            m_DMXInterface->SendDMX();
+	}*/
         m_lastContinuousSend = std::chrono::system_clock::now();
     }
     else if(!m_continuousSend)
@@ -557,14 +763,52 @@ int DmxController::capture(int capS,unsigned int freq)
 
             gettimeofday (&tvalB, NULL);
 		
-	    int newValue = (int)(((zreal + 1.0f) / 2.0f) * 255.0f);
-            newValue = newValue < 0 ? 0 : newValue;
-	    newValue = newValue > 255 ? 255 : newValue;
-	    m_DMXInterface->SetCanalDMX(2, newValue);
-	    m_DMXInterface->SetCanalDMX(3, newValue);
-	    m_DMXInterface->SetCanalDMX(4, newValue);
+	    m_values.push_back(yreal);
 
-            m_DMXInterface->SendDMX();
+                        if (m_values.size() > 10)
+                        {
+                                m_values.erase(m_values.begin());
+                        }
+
+                        double total = 0.0f;
+
+                        for (int i = 0; i < m_values.size(); ++i)
+                        {
+                                total += m_values[i];
+                        }
+
+                        double mean = total / (double)m_values.size();
+
+            int newValue = (int)(((mean + 1.0f) / 2.0f) * 255.0f);
+            newValue = newValue <= 0 ? 0 : newValue;
+            newValue = newValue > 255 ? 255 : newValue;
+            
+	    if(m_DMXInterface)
+            {
+                m_DMXInterface->SetCanalDMX(2, newValue);
+                m_DMXInterface->SetCanalDMX(3, newValue);
+                m_DMXInterface->SetCanalDMX(4, newValue);
+
+                m_DMXInterface->SendDMX();
+            }
+            else
+            {
+                channels[0] = 255;
+                channels[1] = newValue;
+                channels[2] = newValue;
+                channels[3] = newValue;
+                sendDMX();
+            }
+            
+            char buffer[OUTPUT_BUFFER_SIZE];
+            osc::OutboundPacketStream p( buffer, OUTPUT_BUFFER_SIZE );
+
+            p << osc::BeginBundleImmediate
+                << osc::BeginMessage( "/test1" ) 
+                    << 0 << osc::EndMessage
+                << osc::EndBundle;
+
+            transmitSocket.Send( p.Data(), p.Size() );
 
             //long int timdur;
 
@@ -606,3 +850,5 @@ double DmxController::realdata (int data)
     x = d*slope*nfactor;
     return x;  
 }
+
+

@@ -39,7 +39,14 @@ OBJECTFILES= \
 	${OBJECTDIR}/dmx/DmxController.o \
 	${OBJECTDIR}/dmx/enttecdmxusb.o \
 	${OBJECTDIR}/dmx/rs232.o \
-	${OBJECTDIR}/main.o
+	${OBJECTDIR}/ip/IpEndpointName.o \
+	${OBJECTDIR}/ip/posix/NetworkingUtils.o \
+	${OBJECTDIR}/ip/posix/UdpSocket.o \
+	${OBJECTDIR}/main.o \
+	${OBJECTDIR}/osc/OscOutboundPacketStream.o \
+	${OBJECTDIR}/osc/OscPrintReceivedElements.o \
+	${OBJECTDIR}/osc/OscReceivedElements.o \
+	${OBJECTDIR}/osc/OscTypes.o
 
 
 # C Compiler Flags
@@ -66,7 +73,7 @@ ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}/domino: /usr/local/lib/libboost_syste
 
 ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}/domino: ${OBJECTFILES}
 	${MKDIR} -p ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}
-	${LINK.cc} -o ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}/domino ${OBJECTFILES} ${LDLIBSOPTIONS} -lwiringPi -pthread
+	${LINK.cc} -o ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}/domino ${OBJECTFILES} ${LDLIBSOPTIONS} -lwiringPi -pthread -lusb
 
 ${OBJECTDIR}/_ext/4db70e6c/jsoncpp.o: ../jsoncpp/jsoncpp.cpp
 	${MKDIR} -p ${OBJECTDIR}/_ext/4db70e6c
@@ -88,10 +95,45 @@ ${OBJECTDIR}/dmx/rs232.o: dmx/rs232.cpp
 	${RM} "$@.d"
 	$(COMPILE.cc) -O2 -I. -I../jsoncpp -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/dmx/rs232.o dmx/rs232.cpp
 
+${OBJECTDIR}/ip/IpEndpointName.o: ip/IpEndpointName.cpp
+	${MKDIR} -p ${OBJECTDIR}/ip
+	${RM} "$@.d"
+	$(COMPILE.cc) -O2 -I. -I../jsoncpp -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/ip/IpEndpointName.o ip/IpEndpointName.cpp
+
+${OBJECTDIR}/ip/posix/NetworkingUtils.o: ip/posix/NetworkingUtils.cpp
+	${MKDIR} -p ${OBJECTDIR}/ip/posix
+	${RM} "$@.d"
+	$(COMPILE.cc) -O2 -I. -I../jsoncpp -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/ip/posix/NetworkingUtils.o ip/posix/NetworkingUtils.cpp
+
+${OBJECTDIR}/ip/posix/UdpSocket.o: ip/posix/UdpSocket.cpp
+	${MKDIR} -p ${OBJECTDIR}/ip/posix
+	${RM} "$@.d"
+	$(COMPILE.cc) -O2 -I. -I../jsoncpp -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/ip/posix/UdpSocket.o ip/posix/UdpSocket.cpp
+
 ${OBJECTDIR}/main.o: main.cpp
 	${MKDIR} -p ${OBJECTDIR}
 	${RM} "$@.d"
 	$(COMPILE.cc) -O2 -I. -I../jsoncpp -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/main.o main.cpp
+
+${OBJECTDIR}/osc/OscOutboundPacketStream.o: osc/OscOutboundPacketStream.cpp
+	${MKDIR} -p ${OBJECTDIR}/osc
+	${RM} "$@.d"
+	$(COMPILE.cc) -O2 -I. -I../jsoncpp -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/osc/OscOutboundPacketStream.o osc/OscOutboundPacketStream.cpp
+
+${OBJECTDIR}/osc/OscPrintReceivedElements.o: osc/OscPrintReceivedElements.cpp
+	${MKDIR} -p ${OBJECTDIR}/osc
+	${RM} "$@.d"
+	$(COMPILE.cc) -O2 -I. -I../jsoncpp -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/osc/OscPrintReceivedElements.o osc/OscPrintReceivedElements.cpp
+
+${OBJECTDIR}/osc/OscReceivedElements.o: osc/OscReceivedElements.cpp
+	${MKDIR} -p ${OBJECTDIR}/osc
+	${RM} "$@.d"
+	$(COMPILE.cc) -O2 -I. -I../jsoncpp -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/osc/OscReceivedElements.o osc/OscReceivedElements.cpp
+
+${OBJECTDIR}/osc/OscTypes.o: osc/OscTypes.cpp
+	${MKDIR} -p ${OBJECTDIR}/osc
+	${RM} "$@.d"
+	$(COMPILE.cc) -O2 -I. -I../jsoncpp -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/osc/OscTypes.o osc/OscTypes.cpp
 
 # Subprojects
 .build-subprojects:

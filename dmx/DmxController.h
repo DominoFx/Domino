@@ -84,6 +84,8 @@ private:
     int m_value;
     bool m_direction;
     int m_fd;
+    
+    std::vector<double> m_values;
 };
 
 #endif /* DMXCONTROLLER_H */
