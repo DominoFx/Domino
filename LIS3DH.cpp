@@ -65,6 +65,8 @@ bool LIS3DH::Read(int& x, int& y, int& z)
         return false;
     }
     
+    wiringPiI2CWriteReg8(fd, LIS3DH_DEFAULT_ADDRESS, LIS3DH_REG_OUT_X_L | 0x80);
+    
     x  = wiringPiI2CReadReg8(fd, LIS3DH_REG_OUT_X_L);
     y  = wiringPiI2CReadReg8(fd, LIS3DH_REG_OUT_Y_L);
     z  = wiringPiI2CReadReg8(fd, LIS3DH_REG_OUT_Z_L);
