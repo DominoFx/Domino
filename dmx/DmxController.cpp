@@ -7,8 +7,23 @@
 #include<time.h>
 #include <sys/time.h>
 #include <wiringPiI2C.h>
+#include <algorithm>
+#include "LIS3DH.h"
+
+//OSC BEGIN
+#include "osc/OscOutboundPacketStream.h"
+#include "ip/UdpSocket.h"
+
+#define ADDRESS "127.0.0.1"
+#define PORT 8888
+
+#define OUTPUT_BUFFER_SIZE 1024
+
+UdpTransmitSocket transmitSocket( IpEndpointName( ADDRESS, PORT ) );
+//OSC END
 
 #define DMX_CONFIG_FILENAME "dmxconfig.json"
+#define ACCEL_DEFAULT_ADDRESS 0xA
 
 ///Vellman
 
@@ -20,16 +35,6 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <string.h>
-
-#include "osc/OscOutboundPacketStream.h"
-#include "ip/UdpSocket.h"
-
-#define ADDRESS "127.0.0.1"
-#define PORT 7000
-
-#define OUTPUT_BUFFER_SIZE 1024
-
-UdpTransmitSocket transmitSocket( IpEndpointName( ADDRESS, PORT ) );
 
 struct usb_bus *bus;
 struct usb_device *dev;
@@ -199,6 +204,8 @@ m_continuousSend(true)
 ,m_fd(-1)
 ,m_DMXInterface(NULL)
 ,m_initialized(false)
+, m_sensorCount(0)
+, m_useDmx(true)
 {
     m_value = 0;
     m_maxValue = 127;
@@ -244,6 +251,11 @@ bool DmxController::Init()
                 dmxInterface = VELLMAN;
             }
         }
+
+		if (jsonRoot.isMember("sensorCount"))
+		{
+			m_sensorCount = jsonRoot["sensorCount"].asInt();
+		}
         
         if(jsonRoot.isMember("continuousSend"))
         {
@@ -311,32 +323,50 @@ bool DmxController::Init()
             }
         }
     }
-        
-    if(dmxInterface != VELLMAN)
-    {
-        m_DMXInterface = new EnttecDMXUSB(dmxInterface, dmxDevice);
-    }
-    else
-    {
-        if(InitVellman())
-        {
-            m_initialized = true;
-        }
-    }
+
+	if (jsonRoot.isMember("useDmx"))
+	{
+		m_useDmx = jsonRoot["useDmx"].asBool();
+	}
+
+	if (m_useDmx)
+	{
+		if (dmxInterface != VELLMAN)
+		{
+			m_DMXInterface = new EnttecDMXUSB(dmxInterface, dmxDevice);
+			
+			if (m_DMXInterface != NULL && m_DMXInterface->IsAvailable())
+			{
+				m_DMXInterface->ResetCanauxDMX();
+				m_initialized = true;
+			}
+		}
+		else
+		{
+			if (InitVellman())
+			{
+				m_initialized = true;
+			}
+		}
+	}
+	else
+	{
+		m_initialized = true;
+	}
     
     
-    if(m_DMXInterface && m_DMXInterface->IsAvailable())
+    /*if(m_DMXInterface && m_DMXInterface->IsAvailable())
     {
         m_DMXInterface->ResetCanauxDMX();
         m_DMXInterface->SetCanalDMX(1, 255);
         m_DMXInterface->SendDMX();
         m_initialized = true;
-    }
+    }*/
     
     m_lastUpdate = std::chrono::system_clock::now();
     m_lastContinuousSend = std::chrono::system_clock::now();
 
-    m_fd = wiringPiI2CSetup(0xA);
+    m_fd = wiringPiI2CSetup(0x70);//Multiplexer address
 
     return m_initialized;
 }
@@ -612,7 +642,28 @@ void DmxController::Update()
     */
     if(m_interpolations.size() > 0 || (m_continuousSend && (elapsedSend.count() >= m_continuousDelay)))
     {
-        capture(10,500000);
+        
+                for (int i = 0; i < m_sensorCount; ++i)
+		{
+			capture(i, 10, 500000);
+		}
+                int x,y,z;
+                if(LIS3DH::Read(x, y, z) && m_debugOutput)
+                {
+                    printf("LIS3H: %d, %d, %d\n", x, y, z);
+                }
+
+		if (m_useDmx)
+		{
+			if (m_DMXInterface)
+			{
+				m_DMXInterface->SendDMX();
+			}
+			else
+			{
+				sendDMX();
+			}
+		}
         
 	/*if(m_direction)
         {
@@ -672,7 +723,7 @@ void DmxController::getDefaultData()
     printf("BMA220 I2C Slave address\t 0x20\n");
     printf("Register\tDefault Data\n");
 
-    fd = wiringPiI2CSetup(0xA); //0xA BMA220 Slave address
+    fd = wiringPiI2CSetup(ACCEL_DEFAULT_ADDRESS); //0xA BMA220 Slave address
 
     result = wiringPiI2CReadReg8(fd, 0x0);  printf("0x00 = %x\n", result);
     result = wiringPiI2CReadReg8(fd, 0x02); printf("0x02 = %x\n", result);
@@ -717,8 +768,13 @@ void DmxController::getDefaultData()
 	
 }
 
-int DmxController::capture(int capS,unsigned int freq)
+int DmxController::capture(uint8_t sensorIndex, int capS,unsigned int freq)
 {	
+	if (sensorIndex >= m_sensorCount)
+	{
+		return -1;
+	}
+
     int fd;	
     int xdata,ydata,zdata;
     double xreal, yreal, zreal;
@@ -727,8 +783,19 @@ int DmxController::capture(int capS,unsigned int freq)
     struct tm tm = *localtime(&t);		
     FILE *fp;
 	
-    //fd = wiringPiI2CSetup(0xA); //0xA BMA220 Slave address
-	  
+    wiringPiI2CWrite(m_fd, 1 << sensorIndex);
+
+    fd = wiringPiI2CSetup(ACCEL_DEFAULT_ADDRESS); //0xA BMA220 Slave address
+
+    //if (sensorIndex == 1)
+    {
+            //Filtering
+            //wiringPiI2CWriteReg8(fd, 0x20, 0x05);//can be set at"0x05""0x04"......"0x01""0x00", refer to Datashhet on wiki
+
+                                                                                     //Sensitivity
+            //wiringPiI2CWriteReg8(fd, 0x22, 0x0);//can be set at"0x00""0x01""0x02""0x03", refer to Datashhet on wiki
+    }
+
     gettimeofday (&tvalB, NULL);  //must be intilised
     gettimeofday (&tvalA, NULL); //must be intilised
 
@@ -745,71 +812,95 @@ int DmxController::capture(int capS,unsigned int freq)
             //usleep(freq);
 
             //Acceleration data//////////////////////////////////////////////
-            xdata  = wiringPiI2CReadReg8(m_fd, 0x04); 
+            xdata  = wiringPiI2CReadReg8(fd, 0x04); 
             xreal = realdata(xdata);		
 
-            ydata  = wiringPiI2CReadReg8(m_fd, 0x06); 
+            ydata  = wiringPiI2CReadReg8(fd, 0x06); 
             yreal = realdata(ydata);
 
-            zdata  = wiringPiI2CReadReg8(m_fd, 0x08); 
+            zdata  = wiringPiI2CReadReg8(fd, 0x08); 
             zreal = realdata(zdata); 
-
-            if(m_debugOutput)
-	    {
-		printf("X,Y,Z [m/s^2] = %f, %f,  %f\n", xreal, yreal, zreal);
-	    }
 
             ////////////////////////////////////////////////////////////////
 
             gettimeofday (&tvalB, NULL);
 		
-	    m_values.push_back(yreal);
+	        /*m_values.push_back(yreal);
 
-                        if (m_values.size() > 10)
-                        {
-                                m_values.erase(m_values.begin());
-                        }
-
-                        double total = 0.0f;
-
-                        for (int i = 0; i < m_values.size(); ++i)
-                        {
-                                total += m_values[i];
-                        }
-
-                        double mean = total / (double)m_values.size();
-
-            int newValue = (int)(((mean + 1.0f) / 2.0f) * 255.0f);
-            newValue = newValue <= 0 ? 0 : newValue;
-            newValue = newValue > 255 ? 255 : newValue;
-            
-	    if(m_DMXInterface)
+            if (m_values.size() > 10)
             {
-                m_DMXInterface->SetCanalDMX(2, newValue);
-                m_DMXInterface->SetCanalDMX(3, newValue);
-                m_DMXInterface->SetCanalDMX(4, newValue);
-
-                m_DMXInterface->SendDMX();
+                    m_values.erase(m_values.begin());
             }
-            else
+
+            double total = 0.0f;
+
+            for (int i = 0; i < m_values.size(); ++i)
             {
-                channels[0] = 255;
-                channels[1] = newValue;
-                channels[2] = newValue;
-                channels[3] = newValue;
-                sendDMX();
+                    total += m_values[i];
             }
+
+            double mean = total / (double)m_values.size();
+			*/
+
+			 
+
+			double normalizedY = yreal / 0.8125;
+			normalizedY = std::max(std::min(normalizedY, 1.0), -1.0);
+
+			int newValue = (int)(((normalizedY + 1.0f) / 2.0f) * 255.0f);
+			newValue = newValue <= 0 ? 0 : newValue;
+			newValue = newValue > 255 ? 255 : newValue;
+
+			if (m_debugOutput)
+			{
+				printf("Sensor %d,  X,Y,Z [m/s^2] = %f, %f,  %f : %d\n", sensorIndex, xreal, yreal, zreal, newValue);
+			}
             
-            char buffer[OUTPUT_BUFFER_SIZE];
-            osc::OutboundPacketStream p( buffer, OUTPUT_BUFFER_SIZE );
+			if (m_useDmx)
+			{
+				if (m_DMXInterface)
+				{
+					m_DMXInterface->SetCanalDMX(sensorIndex, newValue);
 
-            p << osc::BeginBundleImmediate
-                << osc::BeginMessage( "/test1" ) 
-                    << 0 << osc::EndMessage
-                << osc::EndBundle;
+					//m_DMXInterface->SendDMX();
+				}
+				else
+				{
+					channels[sensorIndex] = newValue;
+					//channels[1] = newValue;
+					//channels[2] = newValue;
+					//channels[3] = newValue;
+					//sendDMX();
+				}
+			}
+                        
+                        //OSC BEGIN
+                        /*if(m_previousValues.size() == 0)
+                        {
+                                m_previousValues.push_back(newValue);
+                        }
+                        //if(newValue > 200 || newValue < 55) 
+                        else if(abs(m_previousValues[0] - newValue) > 5)
+                        {
+                          m_previousValues[0] = newValue;
+                           char buffer[OUTPUT_BUFFER_SIZE];
+                           osc::OutboundPacketStream p( buffer, OUTPUT_BUFFER_SIZE );
 
-            transmitSocket.Send( p.Data(), p.Size() );
+                           p << osc::BeginBundleImmediate
+                              << osc::BeginMessage( "/hits" ) 
+                                << 1 << osc::EndMessage
+                             << osc::EndBundle;
 
+                            transmitSocket.Send( p.Data(), p.Size() );
+
+                            if(m_debugOutput)
+                            {
+                                    printf("PLaying sound\n");
+                            }
+                        }*/
+                        //OSC END
+                        
+                        
             //long int timdur;
 
             //timdur = ((tvalB.tv_sec - tvalA.tv_sec)*1000000L +tvalB.tv_usec) - tvalA.tv_usec ; 
@@ -820,6 +911,9 @@ int DmxController::capture(int capS,unsigned int freq)
 	 	  	  
         //fclose(fp);
    //}	
+
+		close(fd);
+
    return 1;	
 }
 

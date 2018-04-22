@@ -36,6 +36,7 @@ OBJECTDIR=${CND_BUILDDIR}/${CND_CONF}/${CND_PLATFORM}
 # Object Files
 OBJECTFILES= \
 	${OBJECTDIR}/_ext/4db70e6c/jsoncpp.o \
+	${OBJECTDIR}/LIS3DH.o \
 	${OBJECTDIR}/dmx/DmxController.o \
 	${OBJECTDIR}/dmx/enttecdmxusb.o \
 	${OBJECTDIR}/dmx/rs232.o \
@@ -79,6 +80,11 @@ ${OBJECTDIR}/_ext/4db70e6c/jsoncpp.o: ../jsoncpp/jsoncpp.cpp
 	${MKDIR} -p ${OBJECTDIR}/_ext/4db70e6c
 	${RM} "$@.d"
 	$(COMPILE.cc) -g -I. -I../jsoncpp -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/_ext/4db70e6c/jsoncpp.o ../jsoncpp/jsoncpp.cpp
+
+${OBJECTDIR}/LIS3DH.o: LIS3DH.cpp
+	${MKDIR} -p ${OBJECTDIR}
+	${RM} "$@.d"
+	$(COMPILE.cc) -g -I. -I../jsoncpp -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/LIS3DH.o LIS3DH.cpp
 
 ${OBJECTDIR}/dmx/DmxController.o: dmx/DmxController.cpp
 	${MKDIR} -p ${OBJECTDIR}/dmx

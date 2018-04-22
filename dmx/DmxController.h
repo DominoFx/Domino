@@ -21,7 +21,7 @@ private:
     
     double realdata (int data);
     void getDefaultData();
-    int capture(int capS,unsigned int freq);
+    int capture(uint8_t sensorIndex, int capS,unsigned int freq);
     
     struct ChannelInterpolation
     {
@@ -85,7 +85,11 @@ private:
     bool m_direction;
     int m_fd;
     
-    std::vector<double> m_values;
+    //std::vector<double> m_values;
+	int m_sensorCount;
+	bool m_useDmx;
+        
+        std::vector<int> m_previousValues;
 };
 
 #endif /* DMXCONTROLLER_H */
