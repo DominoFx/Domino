@@ -8,7 +8,8 @@
 #include <sys/time.h>
 #include <wiringPiI2C.h>
 #include <algorithm>
-#include "LIS3DH.h"
+//#include "LIS3DH.h"
+#include <soft_i2c.h>
 
 //OSC BEGIN
 #include "osc/OscOutboundPacketStream.h"
@@ -647,11 +648,23 @@ void DmxController::Update()
 		{
 			capture(i, 10, 500000);
 		}
-                int x,y,z;
+                /*int x,y,z;
                 if(LIS3DH::Read(x, y, z) && m_debugOutput)
                 {
                     printf("LIS3H: %d, %d, %d\n", x, y, z);
-                }
+                }*/
+                
+                i2c_t my_bus = i2c_init(9, 8);
+    
+    i2c_start(my_bus);
+    
+    i2c_send_bit(my_bus, 0x28 << 1 | I2C_READ);
+
+    int xdata = i2c_read_bit(my_bus);    
+    
+    printf("x: %d\n", xdata);
+    
+    i2c_stop(my_bus);
 
 		if (m_useDmx)
 		{
@@ -790,10 +803,10 @@ int DmxController::capture(uint8_t sensorIndex, int capS,unsigned int freq)
     //if (sensorIndex == 1)
     {
             //Filtering
-            //wiringPiI2CWriteReg8(fd, 0x20, 0x05);//can be set at"0x05""0x04"......"0x01""0x00", refer to Datashhet on wiki
+            wiringPiI2CWriteReg8(fd, 0x20, 0x05);//can be set at"0x05""0x04"......"0x01""0x00", refer to Datashhet on wiki
 
                                                                                      //Sensitivity
-            //wiringPiI2CWriteReg8(fd, 0x22, 0x0);//can be set at"0x00""0x01""0x02""0x03", refer to Datashhet on wiki
+            wiringPiI2CWriteReg8(fd, 0x22, 0x0);//can be set at"0x00""0x01""0x02""0x03", refer to Datashhet on wiki
     }
 
     gettimeofday (&tvalB, NULL);  //must be intilised

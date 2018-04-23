@@ -1,5 +1,7 @@
 #include "LIS3DH.h"
-#include <wiringPiI2C.h>
+//#include <wiringPiI2C.h>
+#include<stdio.h>
+#include <soft_i2c.h>
 
 #define LIS3DH_DEFAULT_ADDRESS  (0x18)    // if SDO/SA0 is 3V, its 0x19
 
@@ -54,7 +56,7 @@ LIS3DH::~LIS3DH() {
 
 bool LIS3DH::Read(int& x, int& y, int& z)
 {
-    int fd = wiringPiI2CSetup(LIS3DH_DEFAULT_ADDRESS);
+    /*int fd = wiringPiI2CSetup(LIS3DH_DEFAULT_ADDRESS);
     
     //Set hi rez mode 12 bits output
     //LIS3DH_REG_CTRL1 set to 0
@@ -65,11 +67,26 @@ bool LIS3DH::Read(int& x, int& y, int& z)
         return false;
     }
     
+    printf("fd: %d", fd);
+    
     wiringPiI2CWriteReg8(fd, LIS3DH_DEFAULT_ADDRESS, LIS3DH_REG_OUT_X_L | 0x80);
     
     x  = wiringPiI2CReadReg8(fd, LIS3DH_REG_OUT_X_L);
     y  = wiringPiI2CReadReg8(fd, LIS3DH_REG_OUT_Y_L);
     z  = wiringPiI2CReadReg8(fd, LIS3DH_REG_OUT_Z_L);
+    */
+    
+    /*i2c_t my_bus = i2c_init(9, 8);
+    
+    i2c_start(my_bus);
+    
+    i2c_send_bit(my_bus, LIS3DH_REG_OUT_X_L << 1 | I2C_READ);
+
+    int xdata = i2c_read_bit(my_bus);    
+    
+    printf("x: %d\n", xdata);
+    
+    i2c_stop(my_bus);*/
     
     return true;
 }

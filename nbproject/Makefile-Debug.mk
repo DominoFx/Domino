@@ -47,7 +47,8 @@ OBJECTFILES= \
 	${OBJECTDIR}/osc/OscOutboundPacketStream.o \
 	${OBJECTDIR}/osc/OscPrintReceivedElements.o \
 	${OBJECTDIR}/osc/OscReceivedElements.o \
-	${OBJECTDIR}/osc/OscTypes.o
+	${OBJECTDIR}/osc/OscTypes.o \
+	${OBJECTDIR}/soft_i2.o
 
 
 # C Compiler Flags
@@ -140,6 +141,11 @@ ${OBJECTDIR}/osc/OscTypes.o: osc/OscTypes.cpp
 	${MKDIR} -p ${OBJECTDIR}/osc
 	${RM} "$@.d"
 	$(COMPILE.cc) -g -I. -I../jsoncpp -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/osc/OscTypes.o osc/OscTypes.cpp
+
+${OBJECTDIR}/soft_i2.o: soft_i2.cpp
+	${MKDIR} -p ${OBJECTDIR}
+	${RM} "$@.d"
+	$(COMPILE.cc) -g -I. -I../jsoncpp -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/soft_i2.o soft_i2.cpp
 
 # Subprojects
 .build-subprojects:
