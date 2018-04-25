@@ -4,8 +4,8 @@
     <logicalFolder name="HeaderFiles"
                    displayName="Header Files"
                    projectFiles="true">
-      <itemPath>dmx/DmxController.h</itemPath>
-      <itemPath>LIS3DH.h</itemPath>
+      <itemPath>dmx/DominoController.h</itemPath>
+      <itemPath>OscController.h</itemPath>
       <itemPath>dmx/enttecdmxusb.h</itemPath>
       <itemPath>dmx/errcode.h</itemPath>
       <itemPath>dmx/rs232.h</itemPath>
@@ -44,14 +44,12 @@
     <logicalFolder name="SourceFiles"
                    displayName="Source Files"
                    projectFiles="true">
-      <itemPath>dmx/DmxController.cpp</itemPath>
-      <itemPath>LIS3DH.cpp</itemPath>
+      <itemPath>dmx/DominoController.cpp</itemPath>
+      <itemPath>OscController.cpp</itemPath>
       <itemPath>dmx/enttecdmxusb.cpp</itemPath>
       <itemPath>../jsoncpp/jsoncpp.cpp</itemPath>
       <itemPath>main.cpp</itemPath>
       <itemPath>dmx/rs232.cpp</itemPath>
-      <itemPath>soft_i2.cpp</itemPath>
-      <itemPath>soft_i2c.h</itemPath>
     </logicalFolder>
     <logicalFolder name="TestFiles"
                    displayName="Test Files"
@@ -94,13 +92,13 @@
       </compileType>
       <item path="../jsoncpp/jsoncpp.cpp" ex="false" tool="1" flavor2="0">
       </item>
-      <item path="LIS3DH.cpp" ex="false" tool="1" flavor2="0">
+      <item path="OscController.cpp" ex="false" tool="1" flavor2="0">
       </item>
-      <item path="LIS3DH.h" ex="false" tool="3" flavor2="0">
+      <item path="OscController.h" ex="false" tool="3" flavor2="0">
       </item>
-      <item path="dmx/DmxController.cpp" ex="false" tool="1" flavor2="0">
+      <item path="dmx/DominoController.cpp" ex="false" tool="1" flavor2="0">
       </item>
-      <item path="dmx/DmxController.h" ex="false" tool="3" flavor2="0">
+      <item path="dmx/DominoController.h" ex="false" tool="3" flavor2="0">
       </item>
       <item path="dmx/enttecdmxusb.cpp" ex="false" tool="1" flavor2="0">
       </item>
@@ -158,10 +156,6 @@
       <item path="osc/OscTypes.cpp" ex="false" tool="1" flavor2="0">
       </item>
       <item path="osc/OscTypes.h" ex="false" tool="3" flavor2="0">
-      </item>
-      <item path="soft_i2.cpp" ex="false" tool="1" flavor2="0">
-      </item>
-      <item path="soft_i2c.h" ex="false" tool="3" flavor2="0">
       </item>
     </conf>
     <conf name="Release" type="1">
@@ -197,13 +191,13 @@
       </compileType>
       <item path="../jsoncpp/jsoncpp.cpp" ex="false" tool="1" flavor2="0">
       </item>
-      <item path="LIS3DH.cpp" ex="false" tool="1" flavor2="0">
+      <item path="OscController.cpp" ex="false" tool="1" flavor2="0">
       </item>
-      <item path="LIS3DH.h" ex="false" tool="3" flavor2="0">
+      <item path="OscController.h" ex="false" tool="3" flavor2="0">
       </item>
-      <item path="dmx/DmxController.cpp" ex="false" tool="1" flavor2="0">
+      <item path="dmx/DominoController.cpp" ex="false" tool="1" flavor2="0">
       </item>
-      <item path="dmx/DmxController.h" ex="false" tool="3" flavor2="0">
+      <item path="dmx/DominoController.h" ex="false" tool="3" flavor2="0">
       </item>
       <item path="dmx/enttecdmxusb.cpp" ex="false" tool="1" flavor2="0">
       </item>
@@ -261,10 +255,6 @@
       <item path="osc/OscTypes.cpp" ex="false" tool="1" flavor2="0">
       </item>
       <item path="osc/OscTypes.h" ex="false" tool="3" flavor2="0">
-      </item>
-      <item path="soft_i2.cpp" ex="false" tool="1" flavor2="0">
-      </item>
-      <item path="soft_i2c.h" ex="false" tool="3" flavor2="0">
       </item>
     </conf>
   </confs>

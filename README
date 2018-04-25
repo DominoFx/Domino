@@ -1,10 +1,4 @@
-If device cannot be listed unload default linux drivers:
+Config.json
 
-
-Unplug usb cable
-sudo rmmod ftdi_sio
-sudo rmmod usbserial
-plug usb cable
-
-
-Application must be run as sudo.
+"dmxInterface" can be: "pro" or "open"
+"axis" can be: 0 = X, 1 = Y, 2 = Z

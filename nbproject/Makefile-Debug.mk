@@ -36,8 +36,8 @@ OBJECTDIR=${CND_BUILDDIR}/${CND_CONF}/${CND_PLATFORM}
 # Object Files
 OBJECTFILES= \
 	${OBJECTDIR}/_ext/4db70e6c/jsoncpp.o \
-	${OBJECTDIR}/LIS3DH.o \
-	${OBJECTDIR}/dmx/DmxController.o \
+	${OBJECTDIR}/OscController.o \
+	${OBJECTDIR}/dmx/DominoController.o \
 	${OBJECTDIR}/dmx/enttecdmxusb.o \
 	${OBJECTDIR}/dmx/rs232.o \
 	${OBJECTDIR}/ip/IpEndpointName.o \
@@ -47,8 +47,7 @@ OBJECTFILES= \
 	${OBJECTDIR}/osc/OscOutboundPacketStream.o \
 	${OBJECTDIR}/osc/OscPrintReceivedElements.o \
 	${OBJECTDIR}/osc/OscReceivedElements.o \
-	${OBJECTDIR}/osc/OscTypes.o \
-	${OBJECTDIR}/soft_i2.o
+	${OBJECTDIR}/osc/OscTypes.o
 
 
 # C Compiler Flags
@@ -82,15 +81,15 @@ ${OBJECTDIR}/_ext/4db70e6c/jsoncpp.o: ../jsoncpp/jsoncpp.cpp
 	${RM} "$@.d"
 	$(COMPILE.cc) -g -I. -I../jsoncpp -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/_ext/4db70e6c/jsoncpp.o ../jsoncpp/jsoncpp.cpp
 
-${OBJECTDIR}/LIS3DH.o: LIS3DH.cpp
+${OBJECTDIR}/OscController.o: OscController.cpp
 	${MKDIR} -p ${OBJECTDIR}
 	${RM} "$@.d"
-	$(COMPILE.cc) -g -I. -I../jsoncpp -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/LIS3DH.o LIS3DH.cpp
+	$(COMPILE.cc) -g -I. -I../jsoncpp -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/OscController.o OscController.cpp
 
-${OBJECTDIR}/dmx/DmxController.o: dmx/DmxController.cpp
+${OBJECTDIR}/dmx/DominoController.o: dmx/DominoController.cpp
 	${MKDIR} -p ${OBJECTDIR}/dmx
 	${RM} "$@.d"
-	$(COMPILE.cc) -g -I. -I../jsoncpp -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/dmx/DmxController.o dmx/DmxController.cpp
+	$(COMPILE.cc) -g -I. -I../jsoncpp -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/dmx/DominoController.o dmx/DominoController.cpp
 
 ${OBJECTDIR}/dmx/enttecdmxusb.o: dmx/enttecdmxusb.cpp
 	${MKDIR} -p ${OBJECTDIR}/dmx
@@ -141,11 +140,6 @@ ${OBJECTDIR}/osc/OscTypes.o: osc/OscTypes.cpp
 	${MKDIR} -p ${OBJECTDIR}/osc
 	${RM} "$@.d"
 	$(COMPILE.cc) -g -I. -I../jsoncpp -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/osc/OscTypes.o osc/OscTypes.cpp
-
-${OBJECTDIR}/soft_i2.o: soft_i2.cpp
-	${MKDIR} -p ${OBJECTDIR}
-	${RM} "$@.d"
-	$(COMPILE.cc) -g -I. -I../jsoncpp -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/soft_i2.o soft_i2.cpp
 
 # Subprojects
 .build-subprojects:

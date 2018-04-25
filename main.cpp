@@ -1,13 +1,13 @@
 #include <cstdlib>
 #include <unistd.h>
 #include <thread>
-#include "dmx/DmxController.h"
+#include "dmx/DominoController.h"
 
 using namespace std;
 
 int main(int argc, char** argv)
 {
-    DmxController controller;
+    DominoController controller;
     
     if(!controller.Init())
     {

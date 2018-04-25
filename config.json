@@ -1,34 +1,13 @@
 {
-	"dataIn" : 
-	[
-		{
-			"name" : "channel",
-			"type" : "number"
-		},
-		{
-			"name" : "value",
-			"type" : "number"
-		},
-		{
-			"name" : "speed",
-			"type" : "number"
-		},
-		{
-			"name" : "normalizedValue",
-			"type" : "number"
-		},
-		{
-			"name" : "id",
-			"type" : "text"
-		},
-		{
-			"name" : "presence",
-			"type" : "number"
-		}
-	],
-	"dataOut" : [],
-	"id" : "857a3eec-b2ee-473a-aa09-6090856d6d6c",
-	"name" : "DMX Node",
-	"parameters" : [],
-	"serverUri" : "ws://127.0.0.1:9002"
+    "dmxDevice": "/dev/ttyUSB0",
+    "continuousSend": true,
+    "continuousFPS": 30.0,
+    "dmxInterface": "open",
+    "useDmx": false,
+    "axis": 1,
+    "sensorCount": 3,
+    "debugOutput": false,
+    "oscAddress": "127.0.0.1",
+    "oscPort": 8888,
+    "multiplexerAddress": 112
 }

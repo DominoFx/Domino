@@ -29,15 +29,15 @@ typedef byte TDmxArray[NB_CANAUX_MAX+1]; //+ le startcode
 typedef enum _EnttecInterfaces
 {
     OPEN_DMX_USB,
-    DMX_USB_PRO,
-    VELLMAN
+    DMX_USB_PRO
+    /*,VELLMAN*/
 } EnttecInterfaces;
 
 /* Messages format�s */
 static const char nomInterfaces [][20] = {
     "Enttec OPEN DMX USB",
-    "Enttec DMX USB PRO",
-    "VELLMAN"
+    "Enttec DMX USB PRO"
+    /*,"VELLMAN"*/
 } ;
 
 /* Protocole DMX_USB_PRO */
