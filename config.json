@@ -1,4 +1,5 @@
 {
+    "sensor": "BMA220",
     "dmxDevice": "/dev/ttyUSB0",
     "continuousSend": true,
     "continuousFPS": 30.0,
@@ -9,5 +10,6 @@
     "debugOutput": false,
     "oscAddress": "127.0.0.1",
     "oscPort": 8888,
-    "multiplexerAddress": 112
+    "multiplexerAddress": 112,
+    "normalizationValue": 0.8125
 }

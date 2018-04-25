@@ -36,6 +36,8 @@ OBJECTDIR=${CND_BUILDDIR}/${CND_CONF}/${CND_PLATFORM}
 # Object Files
 OBJECTFILES= \
 	${OBJECTDIR}/_ext/4db70e6c/jsoncpp.o \
+	${OBJECTDIR}/BMA220.o \
+	${OBJECTDIR}/LISD3H.o \
 	${OBJECTDIR}/OscController.o \
 	${OBJECTDIR}/dmx/DominoController.o \
 	${OBJECTDIR}/dmx/enttecdmxusb.o \
@@ -80,6 +82,16 @@ ${OBJECTDIR}/_ext/4db70e6c/jsoncpp.o: ../jsoncpp/jsoncpp.cpp
 	${MKDIR} -p ${OBJECTDIR}/_ext/4db70e6c
 	${RM} "$@.d"
 	$(COMPILE.cc) -O2 -I. -I../jsoncpp -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/_ext/4db70e6c/jsoncpp.o ../jsoncpp/jsoncpp.cpp
+
+${OBJECTDIR}/BMA220.o: BMA220.cpp
+	${MKDIR} -p ${OBJECTDIR}
+	${RM} "$@.d"
+	$(COMPILE.cc) -O2 -I. -I../jsoncpp -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/BMA220.o BMA220.cpp
+
+${OBJECTDIR}/LISD3H.o: LISD3H.cpp
+	${MKDIR} -p ${OBJECTDIR}
+	${RM} "$@.d"
+	$(COMPILE.cc) -O2 -I. -I../jsoncpp -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/LISD3H.o LISD3H.cpp
 
 ${OBJECTDIR}/OscController.o: OscController.cpp
 	${MKDIR} -p ${OBJECTDIR}

@@ -1,4 +1,5 @@
 Config.json
 
-"dmxInterface" can be: "pro" or "open"
-"axis" can be: 0 = X, 1 = Y, 2 = Z
+"dmxInterface" can be: "pro"(default) or "open"
+"axis" can be: 0 = X, 1 = Y(default), 2 = Z
+"sensor" can be: "BMA220(default) or "LISD3H"

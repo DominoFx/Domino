@@ -6,6 +6,8 @@
 #include <map>
 #include <json/json.h>
 #include "OscController.h"
+#include "ISensor.h"
+#include "enums.h"
 
 class DominoController {
 public:
@@ -18,15 +20,9 @@ public:
     virtual ~DominoController();
 private:
   
-    enum Axis
-    {
-        X = 0,
-        Y = 1,
-        Z = 2
-    };
     
     double realdata (int data);
-    bool capture(uint8_t sensorIndex, int capS,unsigned int freq);
+    bool capture(uint8_t sensorIndex);
           
     EnttecDMXUSB* m_DMXInterface;
     bool m_initialized;
@@ -47,7 +43,8 @@ private:
     
     OscController m_oscController;
     Axis m_axis;//0 = x, 1 = y, z = 2
-    
+    float m_normalizationValue;
+    ISensor* m_sensor;
 };
 
 #endif /* DMXCONTROLLER_H */

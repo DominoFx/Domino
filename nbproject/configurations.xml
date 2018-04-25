@@ -4,9 +4,13 @@
     <logicalFolder name="HeaderFiles"
                    displayName="Header Files"
                    projectFiles="true">
+      <itemPath>BMA220.h</itemPath>
       <itemPath>dmx/DominoController.h</itemPath>
+      <itemPath>ISensor.h</itemPath>
+      <itemPath>LISD3H.h</itemPath>
       <itemPath>OscController.h</itemPath>
       <itemPath>dmx/enttecdmxusb.h</itemPath>
+      <itemPath>enums.h</itemPath>
       <itemPath>dmx/errcode.h</itemPath>
       <itemPath>dmx/rs232.h</itemPath>
       <itemPath>dmx/types.h</itemPath>
@@ -44,7 +48,9 @@
     <logicalFolder name="SourceFiles"
                    displayName="Source Files"
                    projectFiles="true">
+      <itemPath>BMA220.cpp</itemPath>
       <itemPath>dmx/DominoController.cpp</itemPath>
+      <itemPath>LISD3H.cpp</itemPath>
       <itemPath>OscController.cpp</itemPath>
       <itemPath>dmx/enttecdmxusb.cpp</itemPath>
       <itemPath>../jsoncpp/jsoncpp.cpp</itemPath>
@@ -92,6 +98,16 @@
       </compileType>
       <item path="../jsoncpp/jsoncpp.cpp" ex="false" tool="1" flavor2="0">
       </item>
+      <item path="BMA220.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="BMA220.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="ISensor.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="LISD3H.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="LISD3H.h" ex="false" tool="3" flavor2="0">
+      </item>
       <item path="OscController.cpp" ex="false" tool="1" flavor2="0">
       </item>
       <item path="OscController.h" ex="false" tool="3" flavor2="0">
@@ -111,6 +127,8 @@
       <item path="dmx/rs232.h" ex="false" tool="3" flavor2="0">
       </item>
       <item path="dmx/types.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="enums.h" ex="false" tool="3" flavor2="0">
       </item>
       <item path="ip/IpEndpointName.cpp" ex="false" tool="1" flavor2="0">
       </item>
@@ -191,6 +209,16 @@
       </compileType>
       <item path="../jsoncpp/jsoncpp.cpp" ex="false" tool="1" flavor2="0">
       </item>
+      <item path="BMA220.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="BMA220.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="ISensor.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="LISD3H.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="LISD3H.h" ex="false" tool="3" flavor2="0">
+      </item>
       <item path="OscController.cpp" ex="false" tool="1" flavor2="0">
       </item>
       <item path="OscController.h" ex="false" tool="3" flavor2="0">
@@ -210,6 +238,8 @@
       <item path="dmx/rs232.h" ex="false" tool="3" flavor2="0">
       </item>
       <item path="dmx/types.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="enums.h" ex="false" tool="3" flavor2="0">
       </item>
       <item path="ip/IpEndpointName.cpp" ex="false" tool="1" flavor2="0">
       </item>
