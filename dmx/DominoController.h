@@ -41,6 +41,7 @@ private:
     std::vector<double> m_values   ; 
     std::vector<int> m_previousDMXValues;
     
+    std::string m_oscTag;
     OscController m_oscController;
     Axis m_axis;//0 = x, 1 = y, z = 2
     float m_normalizationValue;

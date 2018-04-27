@@ -93,6 +93,15 @@ bool DominoController::Init()
         m_useDmx = jsonRoot["useDmx"].asBool();
     }
     
+    if (jsonRoot.isMember("oscAddress") && jsonRoot.isMember("oscPort") && jsonRoot.isMember("oscTag"))
+    {
+        std::string address = jsonRoot["oscAddress"].asString();
+        int port = jsonRoot["oscPort"].asInt();
+        m_oscTag = jsonRoot["oscTag"].asString();
+        
+        m_oscController.Init(address, port);
+    }
+    
     int multiplexerAddress = 0x70;//112
     
     if(jsonRoot.isMember("multiplexerAddress"))
@@ -214,6 +223,8 @@ bool DominoController::capture(uint8_t sensorIndex)
     {
         m_DMXInterface->SetCanalDMX(sensorIndex, dmxValue);
     }
+    
+    m_oscController.Send(m_oscTag, sensorIndex + 1);
 
     return true;	
 }

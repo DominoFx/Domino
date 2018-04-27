@@ -10,6 +10,7 @@
     "debugOutput": false,
     "oscAddress": "127.0.0.1",
     "oscPort": 8888,
+    "oscTag": "/hits",
     "multiplexerAddress": 112,
     "normalizationValue": 0.8125
 }
