@@ -13,6 +13,7 @@
 
 #include "BMA220.h"
 #include <wiringPiI2C.h>
+#include <unistd.h>
 
 #define BMA220_DEFAULT_ADDRESS 0xA
 
