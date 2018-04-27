@@ -25,6 +25,8 @@ m_continuousSend(true)
 , m_axis(Axis::Y)
 , m_normalizationValue(1.0f)
 , m_sensor(NULL)
+, m_previousSentDMX(-1)
+, m_oscDMXSendThreshold(5)
 {
 }
 
@@ -100,6 +102,11 @@ bool DominoController::Init()
         m_oscTag = jsonRoot["oscTag"].asString();
         
         m_oscController.Init(address, port);
+    }
+    
+    if(jsonRoot.isMember("oscDMXSendThreshold"))
+    {
+        m_oscDMXSendThreshold = jsonRoot["oscDMXSendThreshold"].asInt();
     }
     
     int multiplexerAddress = 0x70;//112
@@ -224,7 +231,11 @@ bool DominoController::capture(uint8_t sensorIndex)
         m_DMXInterface->SetCanalDMX(sensorIndex, dmxValue);
     }
     
-    m_oscController.Send(m_oscTag, sensorIndex + 1);
+    if(m_previousSentDMX < 0 || abs(m_previousSentDMX - dmxValue) >= m_oscDMXSendThreshold )
+    {
+        m_oscController.Send(m_oscTag, sensorIndex + 1);
+        m_previousSentDMX = dmxValue;
+    }
 
     return true;	
 }

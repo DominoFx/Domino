@@ -43,9 +43,11 @@ private:
     
     std::string m_oscTag;
     OscController m_oscController;
+    int m_oscDMXSendThreshold;
     Axis m_axis;//0 = x, 1 = y, z = 2
     float m_normalizationValue;
     ISensor* m_sensor;
+    int m_previousSentDMX;
 };
 
 #endif /* DMXCONTROLLER_H */
