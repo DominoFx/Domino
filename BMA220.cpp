@@ -66,6 +66,8 @@ float BMA220::GetValue(Axis axis /*= Axis::Y*/)
             break;
         }
     }
+    
+    close(fd);
 
     return Realdata(intData);   
 }
