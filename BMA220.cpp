@@ -48,14 +48,14 @@ float BMA220::GetValue(Axis axis /*= Axis::Y*/)
         
         case Axis::Y:
         {
-            int intData = wiringPiI2CReadReg8(fd, 0x06); 
+            intData = wiringPiI2CReadReg8(fd, 0x06); 
 
             break;
         }
         
         case Axis::Z:
         {
-            int intData = wiringPiI2CReadReg8(fd, 0x08); 
+            intData = wiringPiI2CReadReg8(fd, 0x08); 
 
             break;
         }
