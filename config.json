@@ -4,7 +4,7 @@
     "continuousSend": true,
     "continuousFPS": 30.0,
     "dmxInterface": "open",
-    "useDmx": false,
+    "useDmx": true,
     "axis": 1,
     "sensorCount": 3,
     "debugOutput": false,
