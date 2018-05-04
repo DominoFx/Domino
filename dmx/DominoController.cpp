@@ -228,7 +228,7 @@ bool DominoController::capture(uint8_t sensorIndex)
 
     if (m_useDmx && m_DMXInterface)
     {
-        m_DMXInterface->SetCanalDMX(sensorIndex, dmxValue);
+        m_DMXInterface->SetCanalDMX(sensorIndex + 1, dmxValue);
     }
     
     if(m_previousSentDMX < 0 || abs(m_previousSentDMX - dmxValue) >= m_oscDMXSendThreshold )
