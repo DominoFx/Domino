@@ -38,6 +38,7 @@ OBJECTFILES= \
 	${OBJECTDIR}/_ext/4db70e6c/jsoncpp.o \
 	${OBJECTDIR}/BMA220.o \
 	${OBJECTDIR}/LISD3H.o \
+	${OBJECTDIR}/I2CBus.o \
 	${OBJECTDIR}/OscController.o \
 	${OBJECTDIR}/dmx/DominoController.o \
 	${OBJECTDIR}/dmx/enttecdmxusb.o \
@@ -92,6 +93,11 @@ ${OBJECTDIR}/LISD3H.o: LISD3H.cpp
 	${MKDIR} -p ${OBJECTDIR}
 	${RM} "$@.d"
 	$(COMPILE.cc) -g -I. -I../jsoncpp -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/LISD3H.o LISD3H.cpp
+
+${OBJECTDIR}/I2CBus.o: I2CBus.cpp
+	${MKDIR} -p ${OBJECTDIR}
+	${RM} "$@.d"
+	$(COMPILE.cc) -g -I. -I../jsoncpp -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/I2CBus.o I2CBus.cpp
 
 ${OBJECTDIR}/OscController.o: OscController.cpp
 	${MKDIR} -p ${OBJECTDIR}

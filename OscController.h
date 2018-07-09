@@ -12,7 +12,11 @@ public:
     OscController();
     virtual ~OscController();
     bool Init(std::string address = "127.0.0.1", int port = 8888);
-    void Send(std::string& tag, int index /*float normalizedValue*/);
+
+    // Send data with sensor index and with zero or multiple additional parameters
+    void Send(std::string& tag, int index );
+    void Send(std::string& tag, int index, int paramCount, float* paramBuf );
+
 private:
     std::string m_address;
     int m_port;

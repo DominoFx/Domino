@@ -14,7 +14,12 @@ bool OscController::Init(std::string address/* = "127.0.0.1"*/, int port/* = 888
     return m_transmitSocket != NULL;
 }
 
-void OscController::Send(std::string& tag, int index /*float normalizedValue*/)
+void OscController::Send(std::string& tag, int index)
+{
+    Send( tag, index, 0, nullptr );
+}
+
+void OscController::Send(std::string& tag, int index, int paramCount, float* paramBuf )
 {
     if(m_transmitSocket != NULL)
     {
@@ -24,7 +29,12 @@ void OscController::Send(std::string& tag, int index /*float normalizedValue*/)
 
         packetStream << osc::BeginBundleImmediate
             << osc::BeginMessage( tag.c_str() ) 
-                << index 
+                << index;
+        for( int i=0; i<paramCount; i++ )
+        {
+            packetStream << paramBuf[i];
+        }
+        packetStream
             << osc::EndMessage
           << osc::EndBundle;
 

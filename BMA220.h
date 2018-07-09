@@ -15,15 +15,39 @@
 #define BMA220_H
 
 #include "ISensor.h"
+#include <stdint.h>
+#include <mutex>
 
 class BMA220: public ISensor {
 public:
     BMA220();
     virtual ~BMA220();
+
+    // local methods
+    static int IsAvailable( I2CBus* bus, SensorParams* params );
     
-    float GetValue(Axis axis = Axis::Y);
+    // from ISensor
+    int Init( I2CBus* bus, SensorParams* params ); 
+    int Sample( I2CBus* bus );
+    const SensorData* GetData();
+    const SensorParams* GetParams();
+    void DebugPrint();
+
 private:
     double Realdata (int data);
+
+    std::mutex m_mutex;
+    SensorParams m_params;
+    SensorData m_data;
+
+    struct SensorSample
+    {
+        SensorSample() : tap(0), count(0) {}
+        uint8_t tap;
+        WVec3_t accelSum;
+        int count;
+    };
+    SensorSample m_sample;
 };
 
 #endif /* BMA220_H */

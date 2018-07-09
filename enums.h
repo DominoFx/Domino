@@ -16,9 +16,10 @@
 
 enum Axis
 {
-    X = 0,
-    Y = 1,
-    Z = 2
+    X = 1,
+    Y = 2,
+    Z = 4,
+    XYZ = 7
 };
 
 #endif /* ENUMS_H */

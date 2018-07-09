@@ -283,6 +283,7 @@ bool EnttecDMXUSB::recieve()
                         valid = true;
                         detected = true;
                         config = true;
+                        printf("<CFG> packet\n");
                     }
                     break;
                            

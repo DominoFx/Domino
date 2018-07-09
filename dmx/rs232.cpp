@@ -409,9 +409,14 @@ int CRS232::SetSerialBreak(int state)
     if ( this->fd == INVALID_HANDLE_VALUE ) return 0;
 #if defined(TIOCSBRK) && defined(TIOCCBRK) //check if available for compilation 
     if (state) 
+    {
+        //TODO: PROBLEM, this call is extremely slow, 0.03s to 0.04s
         result = ioctl(fd,TIOCSBRK,0); 
+    }
     else 
+    {
         result = ioctl(fd,TIOCCBRK,0); 
+    }
 	#ifdef DEBUG_RS232
 		std::cerr << " CRS232::SetSerialBreak() : " << state << std::endl;
 	#endif

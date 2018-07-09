@@ -5,26 +5,55 @@
  */
 
 /* 
- * File:   LISD3H.h
+ * File:   LIS3DH.h
  * Author: simon
  *
  * Created on April 25, 2018, 12:56 AM
  */
 
-#ifndef LISD3H_H
-#define LISD3H_H
+#ifndef LIS3DH_H
+#define LIS3DH_H
 
 #include "ISensor.h"
+#include <stdint.h>
+#include <mutex>
 
-class LISD3H: public ISensor {
+
+
+class LIS3DH: public ISensor {
 public:
-    LISD3H();
-    virtual ~LISD3H();
+    LIS3DH();
+    virtual ~LIS3DH();
     
-    float GetValue(Axis axis = Axis::Y);
+    // local methods
+    static int IsAvailable( I2CBus* bus, SensorParams* params );
+
+    // from ISensor
+    int Init( I2CBus* bus, SensorParams* params );
+    int Sample( I2CBus* bus );
+
+    const SensorData* GetData();
+    const SensorParams* GetParams();
+
+    void DebugPrint();
+
 private:
 
+    std::mutex m_mutex;
+    SensorParams m_params;
+    SensorData m_data;
+
+    struct SensorSample
+    {
+        SensorSample() : tap(0), count(0) {}
+        uint8_t tap;
+        uint8_t count;
+        WVec3_t accel[32]; // LIS3DH hardware FIFO buffer has 32 entries
+    };
+    static const int SAMPLE_COUNT = 32;
+    SensorSample m_samples[SAMPLE_COUNT];
+    int m_sampleIndex;
 };
 
-#endif /* LISD3H_H */
+#endif /* LIS3DH_H */
 

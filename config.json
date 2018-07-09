@@ -1,17 +1,32 @@
 {
-    "sensor": "BMA220",
+    "i2cDevice": "/dev/i2c-1",
     "dmxDevice": "/dev/ttyUSB0",
-    "continuousSend": true,
-    "continuousFPS": 30.0,
+
+    "continuousFPS": 100.0,
+
     "dmxInterface": "open",
-    "useDmx": true,
-    "axis": 1,
-    "sensorCount": 3,
+    "dmxEnable": true,
+
+    "sensorAxis": 1,
+    "sensorCount": 12,
+    "sensorSmoothing": 3,
+    "sensorVelocityMultiplier": 1.0,
+    "sensorTapThresh": 80,
+    "sensorTapTimeLimit": 10,
+    "sensorTapTimeLatency": 20,
+    "sensorTapTimeWindow": 255,
+
     "debugOutput": false,
+
     "oscAddress": "127.0.0.1",
     "oscPort": 8888,
-    "oscTag": "/hits",
-    "oscDMXSendThreshold": 5,
-    "multiplexerAddress": 112,
-    "normalizationValue": 0.8125
+    "oscTag": "/domino",
+
+    "diagPort": 12345,
+    "diagAddress": "",
+
+    "multiplexerAddress1": 112,
+    "multiplexerAddress2": 114,
+    "multiplexerLanes": 6
+
 }
