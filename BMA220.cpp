@@ -106,8 +106,8 @@ int BMA220::Init( I2CBus* bus, SensorParams* params )
     // Toggle the mux off
     bus->WriteGlobal( m_params.muxAddress, 0 );
 
-    printf( "DominoFX: Initialized BMA220 motion sensor on mux 0x%X, bitmask 0x%X\n",
-        (int)(m_params.muxAddress), (int)(m_params.muxField) );
+    printf( "DominoFX: Initialized BMA220 motion sensor at index %i, %s ... \n",
+        m_params.index, (result==0?"ok":"failed") );
 
 
     return result;
@@ -167,7 +167,7 @@ const SensorData* BMA220::GetData()
     if( m_sample.count>0 )
     {
         // Hold previous position value; needed below
-        DVec3_t positionOld(m_data.position);
+        DVec3_t accelOld(m_data.acceleration);
 
         // Set acceleration value
         DVec3_t accelVal;
@@ -179,19 +179,17 @@ const SensorData* BMA220::GetData()
 
         m_data.acceleration = accelVal;
 
-        // Set position value
         // TODO: Calculate position from acceleration, with gravity compensation
-        m_data.position = accelVal;
 
         // Set velocity value; difference from current to previous value
-        DVec3_t positionDif(m_data.position);
-        positionDif -= positionOld;
-        m_data.velocity = positionDif; // Velocity is delta between current and previous pos
+        DVec3_t accelDif(accelVal);
+        accelDif -= accelOld;
+        DVec3_t velocity = accelDif; // Velocity is delta between current and previous pos
 
         // Set tap flags
-        m_data.tap.x = (m_data.velocity.x > 0.1?  1 : 0); // TODO: HACK, arbitrary threshold
-        m_data.tap.y = (m_data.velocity.y > 0.1?  1 : 0); // TODO: HACK, arbitrary threshold
-        m_data.tap.z = (m_data.velocity.z > 0.1?  1 : 0); // TODO: HACK, arbitrary threshold
+        m_data.tap.x = (velocity.x > 0.01?  1 : 0); // TODO: HACK, arbitrary threshold
+        m_data.tap.y = (velocity.y > 0.01?  1 : 0); // TODO: HACK, arbitrary threshold
+        m_data.tap.z = (velocity.z > 0.01?  1 : 0); // TODO: HACK, arbitrary threshold
     }
     
     return &m_data;

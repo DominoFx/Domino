@@ -42,6 +42,7 @@ private:
     std::mutex m_mutex;
     SensorParams m_params;
     SensorData m_data;
+    int m_addr;
 
     struct SensorSample
     {

@@ -27,7 +27,8 @@ void OscController::Send(std::string& tag, int index, int paramCount, float* par
 
         osc::OutboundPacketStream packetStream( m_outputBuffer, OSC_OUTPUT_BUFFER_SIZE );
 
-        packetStream << osc::BeginBundleImmediate
+        // Send standard OSC packet, not a bundle; easier for receiver to parse
+        packetStream
             << osc::BeginMessage( tag.c_str() ) 
                 << index;
         for( int i=0; i<paramCount; i++ )
@@ -36,7 +37,7 @@ void OscController::Send(std::string& tag, int index, int paramCount, float* par
         }
         packetStream
             << osc::EndMessage
-          << osc::EndBundle;
+        ;
 
          m_transmitSocket->Send( packetStream.Data(), packetStream.Size() );
     }

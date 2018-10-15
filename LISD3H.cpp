@@ -15,7 +15,8 @@
 #include <stdio.h>
 
 
-#define LIS3DH_ADDRESS_I2C       0x19 // or 0x18 if the SDO pin is low
+#define LIS3DH_ADDRESS_1_I2C     0x18 // if the SDO pin is low
+#define LIS3DH_ADDRESS_2_I2C     0x19 // if the SDO pin is high
 #define LIS3DH_REG_STATUS_AUX    0x07 // accelerometer data status
 #define LIS3DH_REG_WHO_AM_I      0x0F // always returns 0x33
 #define LIS3DH_REG_TEMP_CFG_REG  0x1F // temperature and ADC enable
@@ -135,7 +136,8 @@
 #define LIS3DH_SAMPLES_PER_SECOND     200
 
 
-LIS3DH::LIS3DH()
+LIS3DH::LIS3DH():
+  m_addr(0)
 {
     // HACK: Ensure some initial data appears populated during first GetData() call
     m_samples[0].count = 10;
@@ -152,7 +154,8 @@ int LIS3DH::IsAvailable( I2CBus* bus, SensorParams* params )
 
     int muxAddress = params->muxAddress; 
     int muxField = params->muxField; 
-    uint8_t addr = LIS3DH_ADDRESS_I2C;
+    uint8_t addrList[] = {LIS3DH_ADDRESS_1_I2C,LIS3DH_ADDRESS_2_I2C};
+    uint8_t addr = 0;
 
     // Toggle the mux to the correct device
     bus->WriteGlobal( muxAddress, muxField );
@@ -167,20 +170,32 @@ int LIS3DH::IsAvailable( I2CBus* bus, SensorParams* params )
         result = 1; // error flag
     }
 
+    bus->SetDebugOutput( false );
+    int resultPrev = result;
+    for( int i=0; (i<2) && (addr==0); i++ )
+    {
+        result = resultPrev;
     // Doesn't work as expected, seems to always returns 1
-    int isPresent = bus->IsPresent( addr );
+        int isPresent = bus->IsPresent( addrList[i] );
     if( isPresent==0 )
     {
         result = 2; // error flag
     }
-
+        else
+        {
     // Read the useless WhoAmI register for confirmation
     uint8_t whoAmI;
-    bus->ReadSingle( addr, LIS3DH_REG_WHO_AM_I, &whoAmI );
+            bus->ReadSingle( addrList[i], LIS3DH_REG_WHO_AM_I, &whoAmI );
     if( whoAmI != 0x33 )
     {
         result = 3; // error flag
     }
+        }
+        
+        if( result==0 )
+            addr = addrList[i];
+    }
+    bus->SetDebugOutput( true );
 
     // Toggle the mux off
     bus->WriteGlobal( muxAddress, 0 );
@@ -191,8 +206,6 @@ int LIS3DH::IsAvailable( I2CBus* bus, SensorParams* params )
 int LIS3DH::Init( I2CBus* bus, SensorParams* params )
 {
     int result = 0;
-
-    uint8_t addr = LIS3DH_ADDRESS_I2C;
 
     m_params = (*params);
 
@@ -209,60 +222,73 @@ int LIS3DH::Init( I2CBus* bus, SensorParams* params )
         result = 1; // error flag
     }
 
-    // Read the useless WhoAmI register to make sure we're synchronized
+    uint8_t addrList[] = {LIS3DH_ADDRESS_1_I2C,LIS3DH_ADDRESS_2_I2C};
     uint8_t whoAmI;
-    bus->ReadSingle( addr, LIS3DH_REG_WHO_AM_I, &whoAmI );
+    bus->SetDebugOutput( false );
+    int resultPrev = result;
+    for( int i=0; (i<2) && (m_addr==0); i++ )
+    {
+        result = resultPrev;
+        // Read the useless WhoAmI register to make sure we're synchronized
+        bus->ReadSingle( addrList[i], LIS3DH_REG_WHO_AM_I, &whoAmI );
     if( whoAmI != 0x33 )
     {
-        printf( "ERROR: 0x%X <- LIS3DH::Init() WhoAmI, expected 0x33\n", (int)whoAmI );
         result = 2; // error flag
     }
+        else m_addr = addrList[i];
+    }
+    bus->SetDebugOutput( true );
+    if( result==2 )
+        printf( "ERROR: 0x%X <- LIS3DH::Init() WhoAmI, expected 0x33\n", (int)whoAmI );
     
     // Set Axis
-    bus->ToggleSingle( addr, LIS3DH_REG_CTRL_REG1, LIS3DH_AXIS_XYZ, LIS3DH_AXIS_BITMASK );
+    bus->ToggleSingle( m_addr, LIS3DH_REG_CTRL_REG1, LIS3DH_AXIS_XYZ, LIS3DH_AXIS_BITMASK );
 
     // Set Data Rate
     if( LIS3DH_SAMPLES_PER_SECOND == 200 ) // Set corresponding LIS3DH_DATARATE_200HZ ...
     {
-        bus->ToggleSingle( addr, LIS3DH_REG_CTRL_REG1, LIS3DH_DATARATE_200HZ, LIS3DH_DATARATE_BITMASK );
+        bus->ToggleSingle( m_addr, LIS3DH_REG_CTRL_REG1, LIS3DH_DATARATE_200HZ, LIS3DH_DATARATE_BITMASK );
     }
 
     // Enable Data Ready 1 signal
-    bus->ToggleSingle( addr, LIS3DH_REG_CTRL_REG3, LIS3DH_DRDY1_ENABLE, LIS3DH_DRDY1_BITMASK );
+    bus->ToggleSingle( m_addr, LIS3DH_REG_CTRL_REG3, LIS3DH_DRDY1_ENABLE, LIS3DH_DRDY1_BITMASK );
 
     // Enable Int1 Tap interrupt, we won't use interrupt functionality though
-    bus->ToggleSingle( addr, LIS3DH_REG_CTRL_REG3, LIS3DH_INT1TAP_ENABLE, LIS3DH_INT1TAP_BITMASK );
+    bus->ToggleSingle( m_addr, LIS3DH_REG_CTRL_REG3, LIS3DH_INT1TAP_ENABLE, LIS3DH_INT1TAP_BITMASK );
 
     // Enable High Resolution
-    bus->ToggleSingle( addr, LIS3DH_REG_CTRL_REG4, LIS3DH_HIGHRES_ENABLE, LIS3DH_HIGHRES_BITMASK );
+    bus->ToggleSingle( m_addr, LIS3DH_REG_CTRL_REG4, LIS3DH_HIGHRES_ENABLE, LIS3DH_HIGHRES_BITMASK );
 
     // Enable Block Data Update
-    bus->ToggleSingle( addr, LIS3DH_REG_CTRL_REG4, LIS3DH_BDU_ENABLE, LIS3DH_BDU_BITMASK );
+    bus->ToggleSingle( m_addr, LIS3DH_REG_CTRL_REG4, LIS3DH_BDU_ENABLE, LIS3DH_BDU_BITMASK );
 
     // Set Accel Range (sensitivity)
-    bus->ToggleSingle( addr, LIS3DH_REG_CTRL_REG4, LIS3DH_ACCELRANGE_2G, LIS3DH_ACCELRANGE_BITMASK );
+    bus->ToggleSingle( m_addr, LIS3DH_REG_CTRL_REG4, LIS3DH_ACCELRANGE_2G, LIS3DH_ACCELRANGE_BITMASK );
 
     // Enable Int1 Latching for interrupt, we won't use interrupt functionality though
-    bus->ToggleSingle( addr, LIS3DH_REG_CTRL_REG5, LIS3DH_INT1LATCH_ENABLE, LIS3DH_INT1LATCH_BITMASK);
+    bus->ToggleSingle( m_addr, LIS3DH_REG_CTRL_REG5, LIS3DH_INT1LATCH_ENABLE, LIS3DH_INT1LATCH_BITMASK);
 
     // Enable Analog-to-Digital converter (ADC)
-    bus->ToggleSingle( addr, LIS3DH_REG_TEMP_CFG_REG, LIS3DH_ADC_ENABLE, LIS3DH_ADC_BITMASK);
+    bus->ToggleSingle( m_addr, LIS3DH_REG_TEMP_CFG_REG, LIS3DH_ADC_ENABLE, LIS3DH_ADC_BITMASK);
 
     // Enable Single-Tap detection
-    bus->ToggleSingle( addr, LIS3DH_REG_CLICK_CFG, LIS3DH_SINGLETAP_XYZ, LIS3DH_SINGLETAP_BITMASK );
+    bus->ToggleSingle( m_addr, LIS3DH_REG_CLICK_CFG, LIS3DH_SINGLETAP_XYZ, LIS3DH_SINGLETAP_BITMASK );
 
     // Set the Single-Tap timing and sensitivity params
-    bus->WriteSingle( addr, LIS3DH_REG_CLICK_THS,    m_params.tapThresh );
-    bus->WriteSingle( addr, LIS3DH_REG_TIME_LIMIT,   m_params.tapTimeLimit );
-    bus->WriteSingle( addr, LIS3DH_REG_TIME_LATENCY, m_params.tapTimeLatency );
-    bus->WriteSingle( addr, LIS3DH_REG_TIME_WINDOW,  m_params.tapTimeWindow );
+    bus->WriteSingle( m_addr, LIS3DH_REG_CLICK_THS,    m_params.tapThresh );
+    bus->WriteSingle( m_addr, LIS3DH_REG_TIME_LIMIT,   m_params.tapTimeLimit );
+    bus->WriteSingle( m_addr, LIS3DH_REG_TIME_LATENCY, m_params.tapTimeLatency );
+    bus->WriteSingle( m_addr, LIS3DH_REG_TIME_WINDOW,  m_params.tapTimeWindow );
 
     // Enable First-In-First-Out (FIFO) buffering
-    bus->ToggleSingle( addr, LIS3DH_REG_CTRL_REG5, LIS3DH_FIFO_ENABLE, LIS3DH_FIFO_BITMASK );
-    bus->ToggleSingle( addr, LIS3DH_REG_FIFO_CTRL_REG, LIS3DH_FIFO_MODE_STREAM, LIS3DH_FIFO_MODE_BITMASK );
+    bus->ToggleSingle( m_addr, LIS3DH_REG_CTRL_REG5, LIS3DH_FIFO_ENABLE, LIS3DH_FIFO_BITMASK );
+    bus->ToggleSingle( m_addr, LIS3DH_REG_FIFO_CTRL_REG, LIS3DH_FIFO_MODE_STREAM, LIS3DH_FIFO_MODE_BITMASK );
 
     // Toggle the mux off
     bus->WriteGlobal( m_params.muxAddress, 0 );
+
+    printf( "DominoFX: Initialized LIS3DH motion sensor at index %i addres %X, %s ... \n",
+        m_params.index, m_addr, (result==0?"ok":"failed") );
 
     return result;
 }
@@ -272,44 +298,42 @@ int LIS3DH::Sample( I2CBus* bus )
 {
     int result = 0;
 
-
-    // Lock, only one thread may have access
-    std::lock_guard<std::mutex> lock(m_mutex);
-
     // Toggle the mux to the correct device 
     bus->WriteGlobal( m_params.muxAddress, m_params.muxField );
 
     // Read number of data samples available
-    uint8_t addr = LIS3DH_ADDRESS_I2C;
     uint8_t count;
-    bus->ReadSingle( addr, LIS3DH_REG_FIFO_SRC_REG, &count );
+    bus->ReadSingle( m_addr, LIS3DH_REG_FIFO_SRC_REG, &count );
     count = count & LIS3DH_FIFO_SAMPLES_BITMASK;
 
     // Read samples if any are available
     if( count>0 )
     {
-        if( count>10 )
+        if( count>5 )
         {
-            // Optimization; if more than ten samples waiting in the fifo buffer
+            // Optimization; if too many samples waiting in the fifo buffer
             // don't try to fetch them all right now, otherwise chain reaction
             // putting us further and further behind schedule with other sensors.
             // Instead, only fetch enough for the main thread to use right now,
             // catch up on next iteration.
-            count = 10;
+            count = 5;
         }
 
         // Fetch data sample from our bank
         m_sampleIndex = (m_sampleIndex+1) % SAMPLE_COUNT;
+
+        // Lock, only one thread may have access to m_samples[]
+        std::lock_guard<std::mutex> lock(m_mutex);
 
         SensorSample& sample = m_samples[m_sampleIndex];
         sample.count = count;
 
         // Add 0x80 to register address to enable auto-increment during read
         uint8_t reg = LIS3DH_REG_OUT_X_L | 0x80;
-        bus->ReadMulti( addr, reg, 6*sample.count, (uint8_t*)(sample.accel) );
+        bus->ReadMulti( m_addr, reg, 6*sample.count, (uint8_t*)(sample.accel) );
 
         // Read tap status bits
-        bus->ReadSingle( addr, LIS3DH_REG_CLICK_SRC, &sample.tap );
+        bus->ReadSingle( m_addr, LIS3DH_REG_CLICK_SRC, &sample.tap );
     }
 
     // Toggle the mux off
@@ -329,14 +353,14 @@ const SensorData* LIS3DH::GetData()
 
     // Critical section
     {
-        // Lock, only one thread may have access
+        // Lock, only one thread may have access to m_samples[]
         std::lock_guard<std::mutex> lock(m_mutex);
 
         // Find starting point for accumulation process
         int bufIndex=0, sampleIndex=m_sampleIndex;
         for( int accumRemain = accumCount; accumRemain>0; )
         {
-            SensorSample& sample = m_samples[m_sampleIndex];
+            SensorSample& sample = m_samples[sampleIndex];
             if( sample.count>=accumRemain )
             {
                 bufIndex = sample.count - accumRemain;
@@ -370,20 +394,8 @@ const SensorData* LIS3DH::GetData()
     // Divide by range for final averaged normalized value
     accelVal /= 32768.0;
 
-    // Hold previous position value; needed below
-    DVec3_t positionOld(m_data.position);
-
     // Set acceleration value
     m_data.acceleration = accelVal;
-
-    // Set position value
-    // TODO: Calculate position from acceleration, with gravity compensation
-    m_data.position = accelVal;
-
-    // Set velocity value; difference from current to previous value
-    DVec3_t positionDif(m_data.position);
-    positionDif -= positionOld;
-    m_data.velocity = positionDif; // Velocity is delta between current and previous pos
 
     // Set tap flags
     m_data.tap.x = (tap & LIS3DH_TAP_DETECTX?  1 : 0);

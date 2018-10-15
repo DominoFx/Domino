@@ -34,7 +34,7 @@ EnttecDMXUSB::~EnttecDMXUSB()
 
 byte EnttecDMXUSB::GetChannelDMX(int channel)
 {
-    if(channel > 0 && channel <= NB_CANAUX_MAX) /* 1 � 512 */
+    if(channel > 0 && channel <= NB_CANAUX_MAX) /* 1 - 512 */
     {
         return dmxout[channel];
     }
@@ -44,7 +44,7 @@ byte EnttecDMXUSB::GetChannelDMX(int channel)
 
 bool EnttecDMXUSB::SetCanalDMX(int canal, byte valeur)
 {
-    if(canal > 0 && canal <= NB_CANAUX_MAX) /* 1 � 512 */
+    if(canal > 0 && canal <= NB_CANAUX_MAX) /* 1 - 512 */
     {
         dmxout[canal] = valeur;
         #ifdef DEBUG_DMX_USB
@@ -57,7 +57,7 @@ bool EnttecDMXUSB::SetCanalDMX(int canal, byte valeur)
 
 bool EnttecDMXUSB::SetNbCanauxDMX(int start/*=1*/, int length/*=NB_CANAUX_MAX*/)
 {
-    if((start > 0 && start <= NB_CANAUX_MAX && length > 0) && ((start+length) <= NB_CANAUX_MAX)) /* 1 � 512 */
+    if((start > 0 && start <= NB_CANAUX_MAX && length > 0) && ((start+length) <= NB_CANAUX_MAX)) /* 1 - 512 */
     {
         dmxout_length = start+length;
         #ifdef DEBUG_DMX_USB
@@ -75,7 +75,7 @@ bool EnttecDMXUSB::ResetCanauxDMX(int start/*=1*/, int end/*=NB_CANAUX_MAX*/)
     #ifdef DEBUG_DMX_USB
     fprintf(stderr, " EnttecDMXUSB::ResetCanauxDMX() mise � 0 de %d � %d\n", start, end);
     #endif
-    /* 1 � 512 */
+    /* 1 - 512 */
     if((start > 0 && start <= NB_CANAUX_MAX) && (end > 0 && end <= NB_CANAUX_MAX))
         for(canal=start;canal<end;canal++)
             dmxout[canal] = 0x00;

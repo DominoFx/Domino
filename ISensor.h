@@ -14,12 +14,14 @@
 #ifndef ISENSOR_H
 #define ISENSOR_H
 
-#include "enums.h"
+#include "common.h"
 #include "I2CBus.h"
 #include "vec3.h"
 
 struct SensorParams
 {
+    int index;
+    
     // when using TCA9548A mux chip
     int muxAddress;
     int muxField; // equal to (1<<index)
@@ -38,8 +40,6 @@ public:
     {}
 
     FVec3_t acceleration;
-    FVec3_t velocity;
-    FVec3_t position;
     WVec3_t tap;  // X, Y, Z ... nonzero if tap detected
 };
 

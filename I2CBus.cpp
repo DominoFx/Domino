@@ -66,7 +66,9 @@ struct i2c_rdrw_ioctl_data {
     uint32_t nmsgs;
 };
 
-I2CBus::I2CBus() : file(-1)
+I2CBus::I2CBus():
+  file(-1)
+, debugOutput(true)
 {
 }
 
@@ -122,7 +124,7 @@ int I2CBus::ReadGlobal( uint8_t deviceID, uint8_t* globalVal )
 
     (*globalVal) = data.byte;
 
-    if( result!=0 )
+    if( (result!=0) && debugOutput )
         printf( "ERROR: %i <- I2CBus::WriteGlobal( 0x%X, 0x%X )\n",
             result, (int)deviceID, (int)(*globalVal) );
     
@@ -147,7 +149,7 @@ int I2CBus::WriteGlobal( uint8_t deviceID, uint8_t globalVal )
     if( ioctl( file, I2C_SMBUS, &cmd ) != 0 ) // transmit I2C register ID and value
         result |= 0x02; // error code
 
-    if( result!=0 )
+    if( (result!=0) && debugOutput )
         printf( "ERROR: %i <- I2CBus::WriteGlobal( 0x%X, 0x%X )\n",
             result, (int)deviceID, (int)globalVal );
     
@@ -199,7 +201,7 @@ int I2CBus::WriteSingle( uint8_t deviceID, uint8_t regID, uint8_t regVal )
     if( ioctl( file, I2C_SMBUS, &cmd ) != 0 ) // transmit I2C register ID and value
         result |= 0x02; // error code
 
-    if( result!=0 )
+    if( (result!=0) && debugOutput )
         printf( "ERROR: %i <- I2CBus::WriteSingle( 0x%X, 0x%X, 0x%X )\n",
             result, (int)deviceID, (int)regID, (int)regVal );
     
@@ -232,7 +234,7 @@ int I2CBus::ToggleSingle( uint8_t deviceID, uint8_t regID, uint8_t regVal, uint8
     if( ioctl( file, I2C_SMBUS, &cmd ) != 0 ) // transmit I2C register ID and value
         result |= 0x08; // error code
 
-    if( result!=0 )
+    if( (result!=0) && debugOutput )
         printf( "ERROR: %i <- I2CBus::ToggleSingle( 0x%X, 0x%X, 0x%X, 0x%X )\n",
             result, (int)deviceID, (int)regID, (int)regVal, (int)bitmask );
     
@@ -261,9 +263,14 @@ int I2CBus::ReadMulti( uint8_t deviceID, uint8_t regID, uint8_t regCount, uint8_
     if( ioctl( file, I2C_RDWR, &slave_cmd ) < 0 )
         result |= 0x01; // error code
 
-    if( result!=0 )
+    if( (result!=0) && debugOutput )
         printf( "ERROR: %i <- I2CBus::ReadMulti( 0x%X, 0x%X, %i, regBuf[0] )\n",
             result, (int)deviceID, (int)regID, (int)regCount, (int)regBuf[0] );
 
     return result;
+}
+
+void I2CBus::SetDebugOutput( bool b )
+{
+    debugOutput = b;
 }

@@ -22,92 +22,6 @@
 #define CONFIG_FILENAME "config.json"
 
 
-// 
-// Globals
-// 
-
-int signal_shutdown = 0;
-
-
-//
-// Class DominoParams
-// Helper: Parameters specified in config.json
-//
-
-DominoParams::DominoParams() :
-  i2cDevice( "/dev/i2c-1" )
-, dmxDevice( "/dev/ttyUSB0")
-, dmxEnable(true)
-, oscAddress("127.0.0.1")
-, oscPort(8888)
-, oscTag("/domino")
-, diagAddress("")
-, diagPort(12345)
-, multiplexerAddress1(0x70) //112
-, multiplexerAddress2(0x72) //114
-, multiplexerLanes(6)
-, sensorAxis(Axis::Z)
-, sensorSmoothing(1)
-, sensorVelocityMultiplier(1.0f)
-, sensorTapThresh(80)
-, sensorTapTimeLimit(10)
-, sensorTapTimeLatency(20)
-, sensorTapTimeWindow(255)
-, debugOutput(false)
-{
-}
-
-
-//
-// Class DominoState
-// Helper: Sensor, sound and lighting data
-//
-
-DominoState::DominoState() :
-  m_historyCount(1)
-, m_historyIndex(0)
-, m_angleAvg(0)
-, m_speedAvg(0)
-, m_dmxVal(0)
-{
-}
-
-int DominoState::Init( int historyCount )
-{
-    m_historyCount = historyCount;
-    m_angleHistory.resize(m_historyCount);
-    m_speedHistory.resize(m_historyCount);
-    for (int i = 0; i < m_historyCount; ++i)
-    {
-        m_angleHistory[i] = 0;
-        m_speedHistory[i] = 0;
-    }
-}
-
-void DominoState::Update( float angle, float speed )
-{
-    // rotating list
-    m_historyIndex = (m_historyIndex+1) % m_historyCount;
-    m_angleHistory[m_historyIndex] = angle;
-    m_speedHistory[m_historyIndex] = speed;
-
-    double angleTotal = 0.0f;
-    double speedTotal = 0.0f;
-
-    for (int i = 0; i < m_historyCount; ++i)
-    {
-        angleTotal += m_angleHistory[i];
-        speedTotal += m_speedHistory[i];
-    }
-
-    m_angleAvg = angleTotal / (double)m_historyCount;
-    m_speedAvg = speedTotal / (double)m_historyCount;
-
-    double dmxNormalized = std::max(std::min(m_angleAvg, 1.0), -1.0);
-
-    m_dmxVal = (int)(((dmxNormalized + 1.0f) / 2.0f) * 255.0f);
-    m_dmxVal = std::max(std::min(m_dmxVal, 255), 0);
-}
 
 
 // 
@@ -145,6 +59,20 @@ bool DominoController::Init()
         return false;
     }
    
+    //
+    // Helper
+    //
+
+    #define GET_JSON( j, p, _name_, _type_ )                                       \
+    if( j.isMember(#_name_) )                                                      \
+    {                                                                              \
+        p._name_ = j[#_name_].as##_type_();                                        \
+    }                                                                              \
+    else                                                                           \
+    {                                                                              \
+        printf( "DominoFX: No config entry for \"%s\" \n", #_name_ );              \
+    }
+
     // device name depends on Raspberry Pi model
     // to deterime the correct device, run the following at the command line:
     //   sudo i2cdetect -y 0
@@ -152,141 +80,67 @@ bool DominoController::Init()
     // if the first one works, use "/dev/i2c-0"
     // if the second one works, use "/dev/i2c-1"
 
-    if(jsonRoot.isMember("i2cDevice"))
-    {
-        m_params.i2cDevice = jsonRoot["i2cDevice"].asString();
-    }
+    GET_JSON( jsonRoot, m_params, i2cDevice, String );
 
-    if(jsonRoot.isMember("dmxDevice"))
-    {
-        m_params.dmxDevice = jsonRoot["dmxDevice"].asString();
-    }
+    GET_JSON( jsonRoot, m_params, dmxDevice, String );
 
-    if(jsonRoot.isMember("debugOutput"))
-    {
-        m_params.debugOutput = jsonRoot["debugOutput"].asBool();
-    }
+    GET_JSON( jsonRoot, m_params, debugOutput, Bool );
 
-    if(jsonRoot.isMember("dmxInterface"))
-    {
-        m_params.dmxInterface = jsonRoot["dmxInterface"].asString();
+    GET_JSON( jsonRoot, m_params, dmxInterface, String );
 
-        if(m_params.dmxInterface == "open")
-        {
-            dmxInterfaceID = OPEN_DMX_USB;
-        }
-    }
+    GET_JSON( jsonRoot, m_params, sensorCount, Int );
 
-    if (jsonRoot.isMember("sensorCount"))
-    {
-        m_params.sensorCount = jsonRoot["sensorCount"].asInt();
-    }
-
-    if(jsonRoot.isMember("continuousFPS"))
-    {
-        m_params.continuousFPS = jsonRoot["continuousFPS"].asFloat();
-        {
-          this->m_continuousDelay = 1.0f / m_params.continuousFPS;
-        }
-
-    }
+    GET_JSON( jsonRoot, m_params, continuousFPS, Float );
+    this->m_continuousDelay = 1.0f / m_params.continuousFPS;
     
-    if(jsonRoot.isMember("sensorAxis"))
-    {
-        m_params.sensorAxis = (Axis)jsonRoot["sensorAxis"].asInt();
-    }
+    GET_JSON( jsonRoot, m_params, sensorAxis, Int );
+    GET_JSON( jsonRoot, m_params, dmxEnable, Bool );
 
-    if (jsonRoot.isMember("dmxEnable"))
+    GET_JSON( jsonRoot, m_params, oscAddress, String );
+    GET_JSON( jsonRoot, m_params, oscPort, Int );
+    GET_JSON( jsonRoot, m_params, oscTag, String );
+    if( (m_params.oscAddress.length()!=0) && (m_params.oscPort!=0) )
     {
-        m_params.dmxEnable = jsonRoot["dmxEnable"].asBool();
-    }
-
-    if (jsonRoot.isMember("oscAddress") && jsonRoot.isMember("oscPort") && jsonRoot.isMember("oscTag"))
-    {
-        m_params.oscAddress = jsonRoot["oscAddress"].asString();
-        m_params.oscPort = jsonRoot["oscPort"].asInt();
-
-        if( jsonRoot.isMember("oscTag") )
-        {
-            m_params.oscTag = jsonRoot["oscTag"].asString();
-        }
-        
         printf( "DominoFX: Initializing sound controller...\n" );
         m_oscController.Init( m_params.oscAddress, m_params.oscPort );
     }
 
-    if(jsonRoot.isMember("oscDMXSendThreshold"))
-    {
-        // no longer used
-    }
-    
-    if(jsonRoot.isMember("multiplexerAddress1"))
-    {
-        m_params.multiplexerAddress1 = jsonRoot["multiplexerAddress1"].asInt();
-    }
+    //GET_JSON( jsonRoot, m_params, oscDMXSendThreshold, Int ); // no longer used
 
-    if(jsonRoot.isMember("multiplexerAddress2"))
-    {
-        m_params.multiplexerAddress2 = jsonRoot["multiplexerAddress2"].asInt();
-    }
+    GET_JSON( jsonRoot, m_params, multiplexerAddress1, Int );
+    GET_JSON( jsonRoot, m_params, multiplexerAddress2, Int );
+    GET_JSON( jsonRoot, m_params, multiplexerLanes, Int );
 
-    if(jsonRoot.isMember("multiplexerLanes"))
-    {
-        m_params.multiplexerLanes = jsonRoot["multiplexerLanes"].asInt();
-    }
+    //GET_JSON( jsonRoot, m_params, sensor, Int ); // no longer used
 
-    if(jsonRoot.isMember("sensor"))
-    {
-        // no longer used
-    }
-    
-    if(jsonRoot.isMember("sensorSmoothing"))
-    {
-        m_params.sensorSmoothing = jsonRoot["sensorSmoothing"].asInt();
-    }
+    GET_JSON( jsonRoot, m_params, sensorSmoothing, Int );
 
-    if(jsonRoot.isMember("sensorVelocityMultiplier"))
-    {
-        m_params.sensorVelocityMultiplier = jsonRoot["sensorVelocityMultiplier"].asFloat();
-    }
+    GET_JSON( jsonRoot, m_params, sensorVelocityMultiplier, Float );
 
-    if(jsonRoot.isMember("sensorTapThresh"))
-    {
-        m_params.sensorTapThresh = jsonRoot["sensorTapThresh"].asInt();
-    }
-    if(jsonRoot.isMember("sensorTapTimeLimit"))
-    {
-        m_params.sensorTapTimeLimit = jsonRoot["sensorTapTimeLimit"].asInt();
-    }
-    if(jsonRoot.isMember("sensorTapTimeLatency"))
-    {
-        m_params.sensorTapTimeLatency = jsonRoot["sensorTapTimeLatency"].asInt();
-    }
-    if(jsonRoot.isMember("sensorTapTimeWindow"))
-    {
-        m_params.sensorTapTimeWindow = jsonRoot["sensorTapTimeWindow"].asInt();
-    }
+    GET_JSON( jsonRoot, m_params, sensorTapThresh, Int );
+    GET_JSON( jsonRoot, m_params, sensorTapTimeLimit, Int );
+    GET_JSON( jsonRoot, m_params, sensorTapTimeLatency, Int );
+    GET_JSON( jsonRoot, m_params, sensorTapTimeWindow, Int );
 
-    if (jsonRoot.isMember("diagAddress") && jsonRoot.isMember("diagPort") )
+    // "diagAdress" and "diagPort"
+    GET_JSON( jsonRoot, m_params, diagAddress, String );
+    GET_JSON( jsonRoot, m_params, diagPort, Int );
+
+    if( m_params.diagAddress.length() )
     {
-        m_params.diagAddress = jsonRoot["diagAddress"].asString();
-        m_params.diagPort = jsonRoot["diagPort"].asInt();
-        
-        if( m_params.diagAddress.length() )
+        m_diagSock = socket( AF_INET, SOCK_STREAM, 0 );
+        printf( "DominoFX: Connecting to diagnostics at %s : %i \n",
+            m_params.diagAddress.data(), m_params.diagPort );
+
+        if( m_diagSock==-1 )
         {
-            m_diagSock = socket( AF_INET, SOCK_STREAM, 0 );
-            if( m_diagSock==-1 )
-            {
-                printf( "DominoFX: Unable to create diagnostic socket \n" );
-            }
-            else
-            {
-                m_diagAddr.sin_family = AF_INET;
+            printf( "DominoFX: Unable to create diagnostic socket \n" );
+        }
+        else
+        {
+            m_diagAddr.sin_family = AF_INET;
                 m_diagAddr.sin_port = htons( m_params.diagPort );
-                inet_aton( m_params.diagAddress.c_str(), &m_diagAddr.sin_addr );
-                //printf( "DominoFX: Diagnostic server address %s:%i \n",
-                //    inet_ntoa(m_diagAddr.sin_addr), m_params.diagPort );
-            }
+            inet_aton( m_params.diagAddress.c_str(), &m_diagAddr.sin_addr );
         }
     }
 
@@ -344,6 +198,30 @@ bool DominoController::Init()
     return m_initialized;
 }
 
+// 
+// User input thread
+// 
+
+int DominoController::StartInputThread()
+{
+    int result = 0;
+    
+    printf( "DominoFX: Launching Input thread...\n" );
+    m_inputThread = std::thread(InputThread,this);
+    
+    return result;
+}
+
+void DominoController::InputThread( DominoController* parent )
+{
+    printf( "DominoFX: Input thread started\n" );
+    while( (!feof(stdin)) && (!signal_shutdown) )
+    {
+        int c = getc(stdin);
+        parent->m_debugCmd++;
+    }
+    printf( "DominoFX: Input thread stopped\n" );
+}
 
 void DominoController::Update()
 {
@@ -556,27 +434,4 @@ void DominoController::SensorThread( DominoController* parent )
 }
 
 
-// 
-// User input thread
-// 
 
-int DominoController::StartInputThread()
-{
-    int result = 0;
-    
-    printf( "DominoFX: Launching DominoInput thread...\n" );
-    m_inputThread = std::thread(InputThread,this);
-    
-    return result;
-}
-
-void DominoController::InputThread( DominoController* parent )
-{
-    printf( "DominoFX: Input thread started\n" );
-    while( (!feof(stdin)) && (!signal_shutdown) )
-    {
-        int c = getc(stdin);
-        parent->m_debugCmd++;
-    }
-    printf( "DominoFX: InputThread stopped\n" );
-}

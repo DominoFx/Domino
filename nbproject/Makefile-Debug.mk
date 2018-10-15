@@ -40,6 +40,7 @@ OBJECTFILES= \
 	${OBJECTDIR}/LISD3H.o \
 	${OBJECTDIR}/I2CBus.o \
 	${OBJECTDIR}/OscController.o \
+	${OBJECTDIR}/dmx/DominoState.o \
 	${OBJECTDIR}/dmx/DominoController.o \
 	${OBJECTDIR}/dmx/enttecdmxusb.o \
 	${OBJECTDIR}/dmx/rs232.o \
@@ -104,6 +105,11 @@ ${OBJECTDIR}/OscController.o: OscController.cpp
 	${RM} "$@.d"
 	$(COMPILE.cc) -g -I. -I../jsoncpp -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/OscController.o OscController.cpp
 
+${OBJECTDIR}/dmx/DominoState.o: dmx/DominoState.cpp
+	${MKDIR} -p ${OBJECTDIR}/dmx
+	${RM} "$@.d"
+	$(COMPILE.cc) -g -I. -I../jsoncpp -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/dmx/DominoState.o dmx/DominoState.cpp
+	
 ${OBJECTDIR}/dmx/DominoController.o: dmx/DominoController.cpp
 	${MKDIR} -p ${OBJECTDIR}/dmx
 	${RM} "$@.d"

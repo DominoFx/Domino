@@ -5,12 +5,15 @@
                    displayName="Header Files"
                    projectFiles="true">
       <itemPath>BMA220.h</itemPath>
+      <itemPath>
+dmx/DominoState.h</itemPath>
       <itemPath>dmx/DominoController.h</itemPath>
       <itemPath>ISensor.h</itemPath>
       <itemPath>LISD3H.h</itemPath>
       <itemPath>OscController.h</itemPath>
       <itemPath>dmx/enttecdmxusb.h</itemPath>
-      <itemPath>enums.h</itemPath>
+      <itemPath>
+common.h</itemPath>
       <itemPath>dmx/errcode.h</itemPath>
       <itemPath>dmx/rs232.h</itemPath>
       <itemPath>dmx/types.h</itemPath>
@@ -49,6 +52,8 @@
                    displayName="Source Files"
                    projectFiles="true">
       <itemPath>BMA220.cpp</itemPath>
+      <itemPath>
+dmx/DominoState.cpp</itemPath>
       <itemPath>dmx/DominoController.cpp</itemPath>
       <itemPath>LISD3H.cpp</itemPath>
       <itemPath>OscController.cpp</itemPath>
@@ -112,6 +117,11 @@
       </item>
       <item path="OscController.h" ex="false" tool="3" flavor2="0">
       </item>
+      <item 
+path="dmx/DominoState.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="dmx/DominoState.h" ex="false" tool="3" flavor2="0">
+      </item>
       <item path="dmx/DominoController.cpp" ex="false" tool="1" flavor2="0">
       </item>
       <item path="dmx/DominoController.h" ex="false" tool="3" flavor2="0">
@@ -128,7 +138,7 @@
       </item>
       <item path="dmx/types.h" ex="false" tool="3" flavor2="0">
       </item>
-      <item path="enums.h" ex="false" tool="3" flavor2="0">
+      <item path="common.h" ex="false" tool="3" flavor2="0">
       </item>
       <item path="ip/IpEndpointName.cpp" ex="false" tool="1" flavor2="0">
       </item>
@@ -223,6 +233,11 @@
       </item>
       <item path="OscController.h" ex="false" tool="3" flavor2="0">
       </item>
+      <item 
+path="dmx/DominoState.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="dmx/DominoState.h" ex="false" tool="3" flavor2="0">
+      </item>
       <item path="dmx/DominoController.cpp" ex="false" tool="1" flavor2="0">
       </item>
       <item path="dmx/DominoController.h" ex="false" tool="3" flavor2="0">
@@ -239,7 +254,7 @@
       </item>
       <item path="dmx/types.h" ex="false" tool="3" flavor2="0">
       </item>
-      <item path="enums.h" ex="false" tool="3" flavor2="0">
+      <item path="common.h" ex="false" tool="3" flavor2="0">
       </item>
       <item path="ip/IpEndpointName.cpp" ex="false" tool="1" flavor2="0">
       </item>
