@@ -11,8 +11,9 @@ int main(int argc, char** argv)
     DominoController controller;
     
     printf( "DominoFX: Initializing DominoController...\n" );
-    if(!controller.Init())
+    if(!controller.Init( argc, argv ))
     {
+        printf( "DominoFX: Failure initializing DominoController, aborting\n" );
         return -1;
     }
     

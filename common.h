@@ -14,6 +14,32 @@
 #ifndef COMMON_H
 #define COMMON_H
 
+
+//
+// Helper macros
+//
+
+#define SAFE_DELETE(x) if((x)!=NULL) {delete (x); (x)=NULL;}
+#define SAFE_DELETE_ARRAY(x) if((x)!=NULL) {delete[] (x); (x)=NULL;}
+
+#define MIN( a,b ) ((a)<=(b)? (a):(b))
+#define MAX( a,b ) ((a)>=(b)? (a):(b))
+#define CLAMP( x, lo, hi )  ( (x)<(lo)? (lo) : ((x)>(hi)? (hi) : (x)) )
+#define LERP( a,b, u ) (((a)*(1.0f-(u))) + ((b)*(u)))
+
+#define ZERO_ARRAY(a,count,val) { for(int i=0; i<(count); i++ ) (a)[i]=(val); } 
+
+//
+// Helper functions
+//
+
+bool strcmp_s( const char* a, int aSizeMax, const char* b, int bSizeMax);
+int little_endian( int x );
+
+//
+// Data types
+//
+
 enum Axis
 {
     X = 1,
@@ -30,3 +56,4 @@ extern int signal_shutdown; // signals threads to stop
 
 
 #endif /* ENUMS_H */
+

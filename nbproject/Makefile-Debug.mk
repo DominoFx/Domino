@@ -42,6 +42,7 @@ OBJECTFILES= \
 	${OBJECTDIR}/OscController.o \
 	${OBJECTDIR}/dmx/DominoState.o \
 	${OBJECTDIR}/dmx/DominoController.o \
+	${OBJECTDIR}/dmx/DominoPlayer.o \
 	${OBJECTDIR}/dmx/enttecdmxusb.o \
 	${OBJECTDIR}/dmx/rs232.o \
 	${OBJECTDIR}/ip/IpEndpointName.o \
@@ -68,17 +69,15 @@ FFLAGS=
 ASFLAGS=
 
 # Link Libraries and Options
-LDLIBSOPTIONS=/usr/local/lib/libboost_system.so.1.62.0
+#LDLIBSOPTIONS=/usr/local/lib/libboost_system.so.1.62.0
 
 # Build Targets
 .build-conf: ${BUILD_SUBPROJECTS}
 	"${MAKE}"  -f nbproject/Makefile-${CND_CONF}.mk ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}/domino
 
-${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}/domino: /usr/local/lib/libboost_system.so.1.62.0
-
 ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}/domino: ${OBJECTFILES}
 	${MKDIR} -p ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}
-	${LINK.cc} -o ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}/domino ${OBJECTFILES} ${LDLIBSOPTIONS} -lwiringPi -pthread -lusb
+	${LINK.cc} -o ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}/domino ${OBJECTFILES} ${LDLIBSOPTIONS} -pthread
 
 ${OBJECTDIR}/_ext/4db70e6c/jsoncpp.o: ../jsoncpp/jsoncpp.cpp
 	${MKDIR} -p ${OBJECTDIR}/_ext/4db70e6c
@@ -114,6 +113,11 @@ ${OBJECTDIR}/dmx/DominoController.o: dmx/DominoController.cpp
 	${MKDIR} -p ${OBJECTDIR}/dmx
 	${RM} "$@.d"
 	$(COMPILE.cc) -g -I. -I../jsoncpp -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/dmx/DominoController.o dmx/DominoController.cpp
+
+${OBJECTDIR}/dmx/DominoPlayer.o: dmx/DominoPlayer.cpp
+	${MKDIR} -p ${OBJECTDIR}/dmx
+	${RM} "$@.d"
+	$(COMPILE.cc) -g -I. -I../jsoncpp -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/dmx/DominoPlayer.o dmx/DominoPlayer.cpp
 
 ${OBJECTDIR}/dmx/enttecdmxusb.o: dmx/enttecdmxusb.cpp
 	${MKDIR} -p ${OBJECTDIR}/dmx
@@ -171,7 +175,6 @@ ${OBJECTDIR}/osc/OscTypes.o: osc/OscTypes.cpp
 # Clean Targets
 .clean-conf: ${CLEAN_SUBPROJECTS}
 	${RM} -r ${CND_BUILDDIR}/${CND_CONF}
-	${RM} -r ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}/libboost_system.so.1.62.0
 	${RM} ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}/domino
 
 # Subprojects

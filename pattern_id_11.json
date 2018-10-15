@@ -1,0 +1,10 @@
+{
+    "name":"BALAFON STATION - ID 11",
+    "id":11, 
+    "baselineValueDMX" : 10, 
+    "sequence":
+    [
+        { "fade":"00s 120", "sustain":"00s 000", "dmx":[ {"-2":50},{"-1":60},{"0":110},{"1":60},{"2":50} ] },
+        { "fade":"03s 000", "sustain":"00s 000", "dmx":[] }
+    ]
+}

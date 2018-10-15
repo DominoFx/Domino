@@ -5,15 +5,14 @@
                    displayName="Header Files"
                    projectFiles="true">
       <itemPath>BMA220.h</itemPath>
-      <itemPath>
-dmx/DominoState.h</itemPath>
+      <itemPath>dmx/DominoState.h</itemPath>
       <itemPath>dmx/DominoController.h</itemPath>
+      <itemPath>dmx/DominoPlayer.h</itemPath>
       <itemPath>ISensor.h</itemPath>
       <itemPath>LISD3H.h</itemPath>
       <itemPath>OscController.h</itemPath>
       <itemPath>dmx/enttecdmxusb.h</itemPath>
-      <itemPath>
-common.h</itemPath>
+      <itemPath>common.h</itemPath>
       <itemPath>dmx/errcode.h</itemPath>
       <itemPath>dmx/rs232.h</itemPath>
       <itemPath>dmx/types.h</itemPath>
@@ -52,9 +51,9 @@ common.h</itemPath>
                    displayName="Source Files"
                    projectFiles="true">
       <itemPath>BMA220.cpp</itemPath>
-      <itemPath>
-dmx/DominoState.cpp</itemPath>
+      <itemPath>dmx/DominoState.cpp</itemPath>
       <itemPath>dmx/DominoController.cpp</itemPath>
+      <itemPath>dmx/DominoPlayer.cpp</itemPath>
       <itemPath>LISD3H.cpp</itemPath>
       <itemPath>OscController.cpp</itemPath>
       <itemPath>dmx/enttecdmxusb.cpp</itemPath>
@@ -117,14 +116,17 @@ dmx/DominoState.cpp</itemPath>
       </item>
       <item path="OscController.h" ex="false" tool="3" flavor2="0">
       </item>
-      <item 
-path="dmx/DominoState.cpp" ex="false" tool="1" flavor2="0">
+      <item path="dmx/DominoState.cpp" ex="false" tool="1" flavor2="0">
       </item>
       <item path="dmx/DominoState.h" ex="false" tool="3" flavor2="0">
       </item>
       <item path="dmx/DominoController.cpp" ex="false" tool="1" flavor2="0">
       </item>
       <item path="dmx/DominoController.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="dmx/DominoPlayer.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="dmx/DominoPlayer.h" ex="false" tool="3" flavor2="0">
       </item>
       <item path="dmx/enttecdmxusb.cpp" ex="false" tool="1" flavor2="0">
       </item>
@@ -233,14 +235,17 @@ path="dmx/DominoState.cpp" ex="false" tool="1" flavor2="0">
       </item>
       <item path="OscController.h" ex="false" tool="3" flavor2="0">
       </item>
-      <item 
-path="dmx/DominoState.cpp" ex="false" tool="1" flavor2="0">
+      <item path="dmx/DominoState.cpp" ex="false" tool="1" flavor2="0">
       </item>
       <item path="dmx/DominoState.h" ex="false" tool="3" flavor2="0">
       </item>
       <item path="dmx/DominoController.cpp" ex="false" tool="1" flavor2="0">
       </item>
       <item path="dmx/DominoController.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="dmx/DominoPlayer.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="dmx/DominoPlayer.h" ex="false" tool="3" flavor2="0">
       </item>
       <item path="dmx/enttecdmxusb.cpp" ex="false" tool="1" flavor2="0">
       </item>

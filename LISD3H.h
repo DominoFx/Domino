@@ -47,6 +47,8 @@ private:
     struct SensorSample
     {
         SensorSample() : tap(0), count(0) {}
+        uint8_t pad[1]; // TODO: annoying this structure doesn't align to 4-byte boundary, hence padding
+        uint8_t err;
         uint8_t tap;
         uint8_t count;
         WVec3_t accel[32]; // LIS3DH hardware FIFO buffer has 32 entries

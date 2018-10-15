@@ -1,1 +1,1 @@
-sudo nano /boot/config.txt
+sudo nano ~/.config/lxsession/LXDE-pi/autostart

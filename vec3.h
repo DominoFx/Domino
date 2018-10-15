@@ -14,6 +14,8 @@
 #ifndef VEC3_H
 #define VEC3_H
  
+#include <stdint.h>
+
 struct WVec3Data_t { int16_t x, y, z; };
 struct FVec3Data_t { float   x, y, z; };
 struct DVec3Data_t { double  x, y, z; };

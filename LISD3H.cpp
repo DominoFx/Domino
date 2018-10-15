@@ -13,6 +13,8 @@
 
 #include "LISD3H.h"
 #include <stdio.h>
+#include <thread>
+#include <chrono>
 
 
 #define LIS3DH_ADDRESS_1_I2C     0x18 // if the SDO pin is low
@@ -175,21 +177,21 @@ int LIS3DH::IsAvailable( I2CBus* bus, SensorParams* params )
     for( int i=0; (i<2) && (addr==0); i++ )
     {
         result = resultPrev;
-    // Doesn't work as expected, seems to always returns 1
+        // Doesn't work as expected, seems to always returns 1
         int isPresent = bus->IsPresent( addrList[i] );
-    if( isPresent==0 )
-    {
-        result = 2; // error flag
-    }
+        if( isPresent==0 )
+        {
+            result = 2; // error flag
+        }
         else
         {
-    // Read the useless WhoAmI register for confirmation
-    uint8_t whoAmI;
+            // Read the useless WhoAmI register for confirmation
+            uint8_t whoAmI;
             bus->ReadSingle( addrList[i], LIS3DH_REG_WHO_AM_I, &whoAmI );
-    if( whoAmI != 0x33 )
-    {
-        result = 3; // error flag
-    }
+            if( whoAmI != 0x33 )
+            {
+                result = 3; // error flag
+            }
         }
         
         if( result==0 )
@@ -209,6 +211,10 @@ int LIS3DH::Init( I2CBus* bus, SensorParams* params )
 
     m_params = (*params);
 
+    // Toggle unused mux chips off
+    bus->WriteGlobal( 0x70, 0x0 ); // TODO: HACK add better handling for dual mux
+    bus->WriteGlobal( 0x72, 0x0 ); // TODO: HACK add better handling for dual mux
+    
     // Toggle the mux to the correct device 
     bus->WriteGlobal( m_params.muxAddress, m_params.muxField );
 
@@ -231,10 +237,10 @@ int LIS3DH::Init( I2CBus* bus, SensorParams* params )
         result = resultPrev;
         // Read the useless WhoAmI register to make sure we're synchronized
         bus->ReadSingle( addrList[i], LIS3DH_REG_WHO_AM_I, &whoAmI );
-    if( whoAmI != 0x33 )
-    {
-        result = 2; // error flag
-    }
+        if( whoAmI != 0x33 )
+        {
+            result = 2; // error flag
+        }
         else m_addr = addrList[i];
     }
     bus->SetDebugOutput( true );
@@ -297,14 +303,21 @@ int LIS3DH::Init( I2CBus* bus, SensorParams* params )
 int LIS3DH::Sample( I2CBus* bus )
 {
     int result = 0;
+    int err = 0;
 
-    // Toggle the mux to the correct device 
-    bus->WriteGlobal( m_params.muxAddress, m_params.muxField );
-
+    // Toggle the mux to the correct device
+    err = bus->WriteGlobal( m_params.muxAddress, m_params.muxField );
+    if( err!=0 ) result |= 2; // bit 2 for mux error
+    
     // Read number of data samples available
-    uint8_t count;
-    bus->ReadSingle( m_addr, LIS3DH_REG_FIFO_SRC_REG, &count );
-    count = count & LIS3DH_FIFO_SAMPLES_BITMASK;
+    uint8_t count = 0;
+    //if( aux & 0x08 ) // ensure new data is available before reading count
+    //{
+        // TODO: Why is this returning an I2C error very frequently?
+        err = bus->ReadSingle( m_addr, LIS3DH_REG_FIFO_SRC_REG, &count );
+        if( err!=0 ) result |= 1; // bit 1 for sensor error
+        count = count & LIS3DH_FIFO_SAMPLES_BITMASK;
+    //}
 
     // Read samples if any are available
     if( count>0 )
@@ -330,14 +343,28 @@ int LIS3DH::Sample( I2CBus* bus )
 
         // Add 0x80 to register address to enable auto-increment during read
         uint8_t reg = LIS3DH_REG_OUT_X_L | 0x80;
-        bus->ReadMulti( m_addr, reg, 6*sample.count, (uint8_t*)(sample.accel) );
+        err = bus->ReadMulti( m_addr, reg, 6*sample.count, (uint8_t*)(sample.accel) );
+        if( err!=0 ) result |= 1; // bit 1 for sensor error
 
         // Read tap status bits
-        bus->ReadSingle( m_addr, LIS3DH_REG_CLICK_SRC, &sample.tap );
+        err = bus->ReadSingle( m_addr, LIS3DH_REG_CLICK_SRC, &sample.tap );
+        if( err!=0 ) result |= 1; // bit 1 for sensor error
     }
 
     // Toggle the mux off
-    bus->WriteGlobal( m_params.muxAddress, 0 );
+    err = bus->WriteGlobal( m_params.muxAddress, 0x00 );
+    if( err!=0 ) result |= 2; // bit 2 for mux error
+
+    if( count>0 )
+    {
+        SensorSample& sample = m_samples[m_sampleIndex];
+        sample.err |= result;
+    }
+    else if( result!=0 )
+    {
+        // TODO: This case triggers frequently, why?
+        printf("i2c_err_noSensorData %i, channel 0x%X:0x%X ", result, (int)(m_params.muxAddress), (int)(m_params.muxField) );
+    }
 
     //printf( "LIS3DH::Sample() leave critical section\n" );
     return result;
@@ -350,6 +377,7 @@ const SensorData* LIS3DH::GetData()
     int accumCount = 0.05*LIS3DH_SAMPLES_PER_SECOND;
     DVec3_t accelVal;
     uint8_t tap = 0;
+    uint8_t err = 0;
 
     // Critical section
     {
@@ -383,7 +411,9 @@ const SensorData* LIS3DH::GetData()
             }
             accelVal += m_samples[sampleIndex].accel[bufIndex];
             tap |= m_samples[sampleIndex].tap;
+            err |= m_samples[sampleIndex].err;
             m_samples[sampleIndex].tap = 0; // clear bits, avoid processing same tap twice
+            m_samples[sampleIndex].err = 0; // clear bits, avoid processing same err twice
             bufIndex++;
             accumRemain--;
         }
@@ -401,6 +431,8 @@ const SensorData* LIS3DH::GetData()
     m_data.tap.x = (tap & LIS3DH_TAP_DETECTX?  1 : 0);
     m_data.tap.y = (tap & LIS3DH_TAP_DETECTY?  1 : 0);
     m_data.tap.z = (tap & LIS3DH_TAP_DETECTZ?  1 : 0);
+
+    m_data.err = err;
 
     return &m_data;
 }

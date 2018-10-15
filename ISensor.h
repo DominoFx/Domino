@@ -39,6 +39,8 @@ public:
     SensorData()
     {}
 
+    uint8_t pad[1]; // TODO: annoying this structure doesn't align to 4-byte boundary, hence padding
+    uint8_t err;
     FVec3_t acceleration;
     WVec3_t tap;  // X, Y, Z ... nonzero if tap detected
 };
