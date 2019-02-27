@@ -1026,7 +1026,9 @@ void DominoSensorWorker::Reload()
 
     // Restart transmistter socket to diagnostic server
     printf( "DominoFX: DIAGNOSTICS SERVER SUPPORT DISABLED \n" );
-//    if( (m_params.workerToDiagAddress.length()!=0) && (m_params.workerToDiagPort!=0) )
+//    printf( "!!!!!!!!!!********** DISABLE THIS **********!!!!!!!!!! \n" );
+//    m_context.SetDebugFlags( DominoController::debug_diag_server );
+//    if( m_context.GetDebugDiagServer() && (m_params.workerToDiagAddress.length()!=0) && (m_params.workerToDiagPort!=0) )
 //    {
 //        if( m_diagServer!=nullptr  )
 //        {
@@ -1061,7 +1063,7 @@ void DominoSensorWorker::Update( DmxFrame& dmxout )
             
             if( m_state[sensorIndex]->Active() )
                 active = (active | bit);
-            //accel = m_state[sensorIndex]->Accel();
+            //accel = m_state[sensorIndex]->Accel(); // does not work for virtual sensors, only real sensors
             angle = m_state[sensorIndex]->Angle();
         }
         else // no sensor, set acceleration to zero
@@ -1177,8 +1179,8 @@ int DominoSensorWorker::SendConfig()
     // Send redundantly, to support reconnect if either program is restarted
     if( m_soundServer!=nullptr )
     {
-        if( (!m_soundConfigured) && m_soundServer->Opened() )
-            printf( "DominoFX: Sending configuration init to sound worker ...\n" );
+        //if( (!m_soundConfigured) && m_soundServer->Opened() )
+        //    printf( "DominoFX: Sending configuration init to sound worker ...\n" );
         
         static std::string configTag("/configWorker");
         int param0 = m_params.soundIntrument;
@@ -1219,8 +1221,42 @@ int DominoSensorWorker::GetSleep()
 
 bool DominoSensorWorker::Update(uint8_t sensorIndex)
 {
-    if( (sensorIndex<0) || (sensorIndex >= m_sensor.size()) ||
-        (m_sensor[sensorIndex]==nullptr) )
+    const SensorData* sensorData = nullptr;
+
+
+    if( (sensorIndex>=0) && (sensorIndex < m_sensor.size()) &&
+        (m_sensor[sensorIndex]!=nullptr) )
+    {
+        sensorData = m_sensor[sensorIndex]->GetData();        
+        if( m_context.GetDebugVerbose() )
+        {
+            printf( "---------- ----------\n" );
+            printf("Sensor %i\n", sensorIndex);
+            m_sensor[sensorIndex]->DebugPrint();
+        }
+    }
+
+    DominoState* state = m_state[sensorIndex];
+    int posturePrev = state->Posture(); // posture including up, left, right, mid
+    int postureUpPrev = state->PostureUp(); // posture up or down only
+    
+    // Update state
+    // if sensor data is null, operation uses a virtual sensor
+    state->Update( sensorData, (Axis)m_params.sensorAxis );
+    
+    int posture = state->Posture();
+    int postureUp = state->PostureUp();
+    // Notify nearby dominos when posture changes, for virtual sensor handling
+    if( postureUp!=postureUpPrev ) // only consider major changes between up and down
+    {
+        float veloc = state->VelocPosture();
+        if( (sensorIndex>0) && (m_state[sensorIndex-1]!=nullptr) )
+            m_state[sensorIndex-1]->NotifyPostureRight( posture, posturePrev, veloc );
+        if( (sensorIndex<(m_sensor.size()-1)) && (m_state[sensorIndex+1]!=nullptr) )
+            m_state[sensorIndex+1]->NotifyPostureLeft( posture, posturePrev, veloc );
+    }
+
+    if( sensorData==nullptr )
     {
         if( m_context.GetDebugVerbose() )
         {
@@ -1228,18 +1264,6 @@ bool DominoSensorWorker::Update(uint8_t sensorIndex)
         }
         return 0;
     }
-
-    if( m_context.GetDebugVerbose() )
-    {
-        printf( "---------- ----------\n" );
-        printf("Sensor %i\n", sensorIndex);
-        m_sensor[sensorIndex]->DebugPrint();
-    }
-
-    const SensorData* sensorData = m_sensor[sensorIndex]->GetData();
-
-    DominoState* state = m_state[sensorIndex];
-    state->Update( sensorData, (Axis)m_params.sensorAxis );
 
     if( m_context.GetDebugVerbose() )
     {

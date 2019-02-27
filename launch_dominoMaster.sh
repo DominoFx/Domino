@@ -6,7 +6,7 @@
 cd /home/pi/Domino
 echo `date` >>./error_domino_master.txt
 chmod 777 ./dist/Release/GNU-Linux/domino
-./dist/Release/GNU-Linux/domino -m 2>>./error_domino_master.txt
+./dist/Release/GNU-Linux/domino -m
 
 
 # Wait for user input, to prevent window from closing after ctrl-c,

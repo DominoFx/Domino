@@ -10,7 +10,14 @@
 //
 
 // PHYSICAL MEASUREMENT:
-const float dominoFallAngle = 1.31f; // angle value of fallen domino should be + or - this amount
+const float dominoFallAngle = 1.00f; // angle value of fallen domino should be + or - this amount
+//const float dominoFallAngle = 1.31f; // angle value of fallen domino should be + or - this amount
+// measured value 1.31 for middle dominos 1.00 for end dominos
+
+// PHYSICAL GUESSES:
+const float dominoLiftTime = 1.50f; // average number of seconds for domino to be lifted up
+// TODO: hack, artificially fast because the angle filtering makes effective speed lower
+const float dominoFallTime = 0.05f; // maximim number of seconds for domino to fall
 
 int DominoState::s_instanceCount;
 
@@ -27,10 +34,18 @@ DominoState::DominoState( DominoController& context ) :
 , m_tapRampout(-1)
 , m_tapRampin(-1)
 , m_tapMagnitude(0)
+, m_markTime(0)
+, m_markLastDown(0)
+, m_markLastUp(0)
+, m_angleLastDown(0)
+, m_angleLastUp(0)
+, m_velocPosture(0)
 , m_angleUp(0)
+, m_angleGoal(0)
 , m_angleFiltered(0)
 , m_angleFilteredL1(0)
 , m_angleFilteredL2(0)
+, m_velocGoal(0)
 , m_velocFiltered(0)
 , m_velocFilteredL1(0)
 , m_velocFilteredL2(0)
@@ -77,7 +92,7 @@ void DominoState::Reload()
     m_flashRampoutDelay = m_params.dmxPlayModeFlashOut;
     m_flashCooldownDelay = m_params.dmxPlayModeFlashDelay;
     m_dmxPlayModeUpThresh = (m_params.dmxPlayModeUpRange - 0.01);
-    m_dmxPlayModeDownThresh = dominoFallAngle - 0.15f; // yeah, this fudge factor is hard-coded
+    m_dmxPlayModeDownThresh = dominoFallAngle - 0.15f; // TODO: fix hard-coded constant fudge factor
     m_dmxPlayModeSpan = m_dmxPlayModeDownThresh - m_dmxPlayModeUpThresh;
     m_historyCount = std::max( 2*(m_tapLookbackDelay+m_tapMagnitudeDelay), 10 );
     if( (m_angleHistory.size()!=m_historyCount) || (m_velocHistory.size()!=m_historyCount) ||
@@ -143,18 +158,47 @@ inline float RotatingListDerivative( int i, std::vector<float>& f )
 
 void DominoState::Update( const SensorData* sensorData, Axis axis )
 {
+	float angle;
+    FVec3_t accel;
+    
     if( sensorData==nullptr )
     {
-        m_dmxVal = m_params.dmxPlayModeUp;
-        return;
+        m_realSensor = 0;
+        
+        // Virtual sensor
+        // Angle is calculated by moving toward "angle goal" at rate equal to "velocity goal"
+        // Both goals determined via notifications from nearby dominos
+        angle = m_angleHistory[m_historyIndex] + m_velocGoal;
+        
+        float anglePrev = m_angleHistory[m_historyIndex];
+                
+        bool passedGoalDown = (angle < m_angleGoal) && (m_velocGoal < 0);
+        bool passedGoalUp   = (angle > m_angleGoal) && (m_velocGoal > 0);        
+        if( passedGoalDown || passedGoalUp )
+        {   // when crossing the goal, backtrack to hit it exactly, but slowing down each crossing
+            m_velocGoal = -(m_velocGoal/2.0f);
+        }
+        accel.x = accel.y = accel.z = 0;
+        m_err = 0;
+    }
+    else
+    {
+        m_realSensor = 1;
+        // TODO: Add params to control which axis and positive or negative is up, versus which axis is the roation pivot
+	    if( axis==Axis::Z )
+		    angle = atan2( sensorData->acceleration.x, sensorData->acceleration.y );
+	    if( axis==Axis::X )
+		    angle = atan2( sensorData->acceleration.z, sensorData->acceleration.y );
+    
+        angle -= m_angleUp;
+        accel = sensorData->acceleration;
+        // Hardware tap detection
+        //if( axis==Axis::X ) tap = sensorData->tap.y + sensorData->tap.z;
+        //if( axis==Axis::Y ) tap = sensorData->tap.x + sensorData->tap.z;
+        //if( axis==Axis::Z ) tap = sensorData->tap.x + sensorData->tap.y;
+        m_err = sensorData->err;    
     }
     
-	float angle;
-    // TODO: Add params to control which axis and positive or negative is up, versus which axis is the roation pivot
-	if( axis==Axis::Z )
-		angle = atan2( sensorData->acceleration.x, sensorData->acceleration.y );
-        
-    angle -= m_angleUp;
 	
 	//float veloc = angle - m_angleHistory[m_historyIndex];
 	
@@ -170,12 +214,6 @@ void DominoState::Update( const SensorData* sensorData, Axis axis )
     float veloc = anglePrev - m_angleFilteredL1;
     m_velocFilteredL1 = ((1.0-uL1)*m_velocFilteredL1) + (uL1*veloc);
     m_velocFilteredL2 = ((1.0-uL2)*m_velocFilteredL2) + (uL2*m_velocFilteredL1);
-
-
-    // Hardware tap detection
-    //if( axis==Axis::X ) tap = sensorData->tap.y + sensorData->tap.z;
-    //if( axis==Axis::Y ) tap = sensorData->tap.x + sensorData->tap.z;
-    //if( axis==Axis::Z ) tap = sensorData->tap.x + sensorData->tap.y;
 
 
     // Choose which filtered values will be transmitted to sound and diag servers
@@ -195,7 +233,7 @@ void DominoState::Update( const SensorData* sensorData, Axis axis )
     m_velocHistory[m_historyIndex] = veloc;
     m_angleFilteredHistory[m_historyIndex] = m_angleFiltered;
     m_velocFilteredHistory[m_historyIndex] = m_velocFiltered;
-    m_accelHistory[m_historyIndex] = sensorData->acceleration;
+    m_accelHistory[m_historyIndex] = accel;
 
     // check if current state counts as a tap, not necessarily valid to send yet
     int currentTapped = 0;
@@ -208,11 +246,45 @@ void DominoState::Update( const SensorData* sensorData, Axis axis )
     // check if current state should activate from idle mode    
     float velocAbs = abs(m_velocFiltered);
     m_activated = (velocAbs>m_idleVelocThresh? 1:0);
+
+    // posture handling    
+    float angleAbs = fabs( m_angleFiltered );
+    if( angleAbs < m_dmxPlayModeUpThresh )
+    {
+        m_posture = posture_up;
+    }
+    else if( m_angleFiltered>0 ) // falling left
+    {
+        if(angleAbs >= m_dmxPlayModeDownThresh)
+             m_posture = posture_left_down;
+        else m_posture = posture_left_mid;
+    }
+    else if( m_angleFiltered<0 ) // falling right
+    {
+        if(angleAbs >= m_dmxPlayModeDownThresh)
+             m_posture = posture_right_down;
+        else m_posture = posture_right_mid;
+    }
+    // handle posture crossing from up to down, measure velocPosture    
+    m_markTime++;
+    int postureUpPrev = m_postureUp;
+    if( angleAbs < m_dmxPlayModeUpThresh )
+    {
+        m_markLastUp = m_markTime;
+        m_angleLastUp = m_angleFiltered;
+        m_postureUp = 1;
+    }
+    else if( angleAbs >= m_dmxPlayModeDownThresh )
+    {
+        m_markLastDown = m_markTime;
+        m_angleLastDown = m_angleFiltered;
+        m_postureUp = 0;
+    }
+    // calculate velocPosture on posture crossing
+    if( m_postureUp!=postureUpPrev )
+        // handles sign correctly, it's magic
+        m_velocPosture = ( (m_angleLastUp-m_angleLastDown) / (m_markLastUp-m_markLastDown) );
     
-    float angleAbs = fabs( angle );
-    bool upright = (angleAbs < m_dmxPlayModeUpThresh); // upright posture
-    bool fallen  = (angleAbs >= m_dmxPlayModeDownThresh); // fully fallen posture
-    m_posture = (upright? 1 : (fallen? -1 : 0 ));
 
     // check calibration; if domino is inactive and fallen in its "flattest" direction,
     // then drift the true up direction, comparing reported angle to known physical value
@@ -272,13 +344,65 @@ void DominoState::Update( const SensorData* sensorData, Axis axis )
     
     
     if( m_tap ) printf("tap magnitude %.4f \n",m_tapMagnitude);
-    //if( m_activated ) printf("Domino %i, angle %.3f, veloc %.4f \n", (int)m_index, (float)angle, (float)m_velocFiltered);
 
     
     // Update the DMX value
     Update_DMX( m_posture, m_angleFiltered, m_velocFiltered ); // sets m_dmxVal
+}
+
+inline bool PostureLeft(  int posture ) { return (posture==posture_left_mid)  || (posture==posture_left_down);  }
+inline bool PostureRight( int posture ) { return (posture==posture_right_mid) || (posture==posture_right_down); }
+
+void DominoState::NotifyPostureLeft(  int posture, int posturePrev, float veloc )
+{
+    bool thatRightPrev = PostureRight( posturePrev );
+    bool thisLeftCur   = PostureLeft(  m_posture );
+
+    // Nearby domino is going up, and had an insersection with us earlier; assume we'll travel up    
+    if( (posture==posture_up) && (thatRightPrev || thisLeftCur) )
+        SetPostureGoal( posture_up, veloc );
+    // Nearby domino is going down, while intersecting with us; assume we'll travel down
+    // Special case if we're already leaned left, assume the two dominos touch and balance
+    if( (posture==posture_right_down) && !thisLeftCur )
+        SetPostureGoal( posture_right_down, veloc );
+}
+
+void DominoState::NotifyPostureRight( int posture, int posturePrev, float veloc )
+{
+    bool thatLeftPrev = PostureLeft(  posturePrev );
+    bool thisRightCur = PostureRight( m_posture );
+
+    // Nearby domino is going up, and had an insersection with us earlier; assume we'll travel up    
+    if( (posture==posture_up) && (thatLeftPrev || thisRightCur) )
+        SetPostureGoal( posture_up, veloc );
+    // Nearby domino is going down, while intersecting with us; assume we'll travel down
+    if( (posture==posture_left_down) && !thisRightCur )
+        SetPostureGoal( posture_left_down, veloc );
+}
+
+void DominoState::SetPostureGoal( int posture, float veloc )
+{
+    if( posture==posture_up )
+        m_angleGoal = 0;
+    else if( posture==posture_left_down )
+        m_angleGoal =  dominoFallAngle;
+    else if( posture==posture_right_down )
+        m_angleGoal = -dominoFallAngle;
+
+    // lifting speed is constnt, relatively slow
+    float speedUpConst = (1.0f/(dominoLiftTime*m_params.continuousFPS));
+    // lifting speed minimum, relatively false
+    float speedDownMin = (1.0f/(dominoFallTime*m_params.continuousFPS));
         
-    m_err = sensorData->err;    
+    float speed;
+    if( posture==posture_up )
+         speed = speedUpConst;
+    else speed = MAX( fabs(veloc), speedDownMin );
+    
+    if( m_angleFiltered > m_angleGoal )
+        m_velocGoal = -speed;
+    else
+        m_velocGoal = speed;
 }
 
 // Helper for Update()
@@ -337,33 +461,24 @@ void DominoState::Update_DMX( int posture, float angle, float veloc )
 
     m_dmxVal = pulseCenter;
     
-    //static int blah = 0;
-    //bool print = ( (m_index==0) && ((blah++ % 10)==0) );
-
     // Lighting wave back up to baseline if below...    
     
-    bool upright = (posture==1); // upright posture
-    if( upright ) 
+    if( posture==posture_up ) 
     {
-        //if( print ) printf("upright \n");
         m_fallRampout = -1;
     }
     if( m_dmxVal < m_params.dmxBaseline )
     {
-        //if( print ) printf("1 m_fallRampout=%i \n",m_fallRampout);
         if( m_fallRampout==0 )
         {
-            //if( print ) printf("2 \n");
             m_dmxVal = m_params.dmxBaseline; // fell too long ago, clip to baseline
         }
         else if( m_fallRampout<0 )
         {
-            //if( print ) printf("3 m_fallRampout=%i \n",m_fallRampout);
             m_fallRampout = m_fallRampoutDelay; // fell at this moment, begin rampout
         }
         else
         {
-            //if( print ) printf("4 \n");
             if( m_fallRampout<(m_fallRampoutDelay/4) )
             {   // fell recently, slowly ramp upwards, decrementing rampout
                 float w = m_fallRampout / (float)(m_fallRampoutDelay/4);
@@ -371,12 +486,7 @@ void DominoState::Update_DMX( int posture, float angle, float veloc )
             }
             m_fallRampout--;
         }
-        //if( print ) printf("5 m_fallRampout=%i \n",m_fallRampout);
     }    
-    //if( print )
-    //    printf("angleAbs = %.2f, pulseCenter = %.2f, pulseMul = %.2f, dmxVal = %i, fallRampout = %i \n",
-    //        angleAbs, pulseCenter, pulseMul, m_dmxVal, m_fallRampout );
-    //if( print ) printf("6 m_fallRampout=%i \n",m_fallRampout);
 }
 
 

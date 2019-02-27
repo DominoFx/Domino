@@ -5,7 +5,7 @@
 
 cd /home/pi/Domino
 echo `date` >>./error_sound_master.txt
-sclang ./SuperCollider/mother_181209.scd 2>>./error_sound_master.txt
+sclang ./SuperCollider/mother_181209.scd
 
 
 # Wait for user input; if launched via lxterminal,

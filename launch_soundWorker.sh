@@ -5,7 +5,7 @@
 
 cd /home/pi/Domino
 echo `date` >>/home/pi/Domino/error_sound_worker.txt
-sclang /home/pi/Domino/SuperCollider/dominoWorker_181209.scd 2>>/home/pi/Domino/error_sound_worker.txt
+sclang /home/pi/Domino/SuperCollider/dominoWorker_181209.scd
 
 
 # Wait for user input; if lxterminal was launched at startup,

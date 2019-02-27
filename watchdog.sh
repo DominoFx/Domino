@@ -9,7 +9,6 @@ CONNECTED="0"
 SLEEP="1"
 MEDIA=""
 
-
 #
 # Basic configuration setup
 #
@@ -23,7 +22,6 @@ sudo sh -c "echo performance > /sys/devices/system/cpu/cpu3/cpufreq/scaling_gove
 #
 # Helper
 #
-
 on_usb_connect()
 {
     echo "Copying autorun script from $MEDIA/Domino to /home/pi..." 
@@ -101,6 +99,7 @@ check_msg_sleep()
     # TODO: How to listen with "netcat" for finite amount of time, then quit?
     # Solution here is to use helper script with timeout command, but
     # script runs in a subshell, can't set variables, only returns an integer
+    chmod 777 /home/pi/Domino/watchdog_helper_listen.sh
     timeout 2 /home/pi/Domino/watchdog_helper_listen.sh
     # return value of last command executed...
     SLEEP_CHECK=`echo $?`
