@@ -39,7 +39,7 @@ public:
 
     // Access to a block of multiple register
     int ReadMulti(    uint8_t deviceID, uint8_t regID, uint8_t bufCount, uint8_t* regBuf );
-
+    
     void SetDebugOutput( bool b );
 
 protected:

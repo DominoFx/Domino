@@ -9,7 +9,7 @@
 #include <map>
 #include <thread>
 
-#define SAFE_DELETE(x) if((x)!=NULL) {delete (x); (x)=NULL;}
+#define SAFE_DELETE(x) if((x)!=nullptr) {delete (x); (x)=nullptr;}
 
 
 #define OSC_OUTPUT_BUFFER_SIZE 1024
@@ -18,12 +18,15 @@
 //
 // Class OscController
 // 
+
 class OscController {
 public:
     OscController();
     virtual ~OscController();
-    bool Init(std::string address = "127.0.0.1", int port = 8888);
-    bool IsInitialized();
+    bool Open(std::string address = "127.0.0.1", int port = 8888);
+    bool Opened();
+    int Port();
+    std::string Address();
 
     // Send data with params
     void Send(std::string& tag, int paramCount, float* paramBuf );
@@ -32,20 +35,42 @@ public:
     // Send data with integer param and additional params
     void Send(std::string& tag, int param0, int paramCountRest, const char** paramBufRest );
     void Send(std::string& tag, int param0, int param1, int paramCountRest, const char** paramBufRest );
-    void Send(std::string& tag, int param0, int paramCountResr, float* paramBuf );
+    void Send(std::string& tag, int param0, int paramCountRest, float* paramBuf );
     
 private:
-    std::string m_address;
-    int m_portTransmit;
+    IpEndpointName m_ipEndpointName;
     
-    UdpTransmitSocket* m_transmitSocket;
+    UdpSocket* m_transmitSocket;
     char m_outputBuffer[OSC_OUTPUT_BUFFER_SIZE];
 };
 
 
 //
+// Class OscBroadcaster
+// 
+
+class OscBroadcaster {
+public:
+    OscBroadcaster();
+    virtual ~OscBroadcaster();
+    bool Open(int port = 8888);
+    bool Opened();
+    bool IsInitialized();
+
+    // Send data with params
+    void Send(std::string& tag, int paramCount, int* paramBuf );
+    
+private:
+    UdpBroadcastSocket* m_broadcastSocket;
+    char m_outputBuffer[OSC_OUTPUT_BUFFER_SIZE];
+};
+
+
+
+//
 // Class OscListener
 // 
+
 typedef void (*OscCallback)( const char *argsData, int argsSize, const IpEndpointName& remoteEndpoint, void* param );
 
 class OscListener : public PacketListener {
@@ -64,7 +89,7 @@ public:
     } OscComparator;
     
     // Map from tags to client data.
-    // Key is char* instead of std::string, so map lookups do not requir memory allocation
+    // Key is char* instead of std::string, so map lookups do not require memory allocation
     typedef std::map<const char*,OscFunc,OscComparator> ClientMap;    
     typedef std::vector<char*> TagVec;
 
@@ -72,8 +97,10 @@ public:
     virtual ~OscListener();
     
     int Register( const char* tag, OscCallback callbackFunc, void* callbackParam );
-    int Run( int port );
-    bool Running();
+    int Unregister( OscCallback callbackFunc );
+    int Open( int port );
+    bool Opened();
+    int Port();
     
 private:
     ClientMap m_clientMap;

@@ -1,5 +1,6 @@
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.Vector;
 import java.nio.ByteBuffer;
 import hypermedia.net.*; // -- UDP LIBRARY --
 //  import processing.net.*; // -- OSCP5 LIBRARY --
@@ -12,8 +13,8 @@ int     NUM_DOMINOS = 10;
 int     SERVER_PORT = 12345;
 
 float   SCOPE_SCALE = 1.0;
-int     DEFAULT_WINDOW_WIDTH = 1280; // to change, also edit the setup() function
-int     DEFAULT_WINDOW_HEIGHT = 800; // to change, also edit the setup() function
+int     DEFAULT_WINDOW_WIDTH = 1600; // to change, also edit the setup() function
+int     DEFAULT_WINDOW_HEIGHT = 1000; // to change, also edit the setup() function
 
 // Window and drawing
 int     curWidth = 0;
@@ -29,12 +30,20 @@ float   housingUpperHeight;
 
 // Timing
 int     tick;
+int     messageCount=0;
+int     drawCount=0;
 Boolean paused;
-int     timeUpdate[];
-int     timeIndex;
-float   fps;
 final Timer postSetupTimer = new Timer();
 
+// FPS calculation
+int     messageCountPrev=0;
+int     drawCountPrev=0;
+int     timePrev=0;
+float   messageFps=0;
+float   drawFps=0;
+
+// Message handling
+//int     messagePrev;
 
 // Temp values used by draw()
 PVector pivot      = new PVector();
@@ -52,49 +61,68 @@ UDP udp; // -- UDP LIBRARY --
 
 
 // Data received
-float   sensorAngles[];
-PVector sensorVectors[];
-float   sensorActive[];
-float   sensorTap[];
-float   sensorErr[];
-float   sensorDMX[];
-String  modeStatus[];
-float   modeValue[];
+class SensorState
+{
+  SensorState() {sensorAccel=new PVector();}
+  public int     sensorUpdateId;
+  public float   sensorActive;
+  public float   sensorAngle;
+  public PVector sensorAccel;
+  public float   sensorVeloc;
+  public float   sensorTap;
+  public float   sensorErr;
+  public float   sensorDMX;
+}
+class DominoState
+{
+  DominoState() {sensorAccel=new PVector(); modeStatus=new String();}
+  public float   sensorActive;
+  public float   sensorAngle;
+  public PVector sensorAccel;
+  public float   sensorVeloc;
+  public float   sensorDMX;
+  public float   sensorVolume;
+  public String  modeStatus;
+  public float   modeValue;
+}
+DominoState states[];
 
+class SensorUpdate
+{
+  SensorUpdate() {
+    states=new SensorState[NUM_DOMINOS];
+    for( int i=0; i<NUM_DOMINOS; i++ ) states[i]=new SensorState();
+  }
+  public SensorState states[];
+  public int     id;
+}
+Vector<SensorUpdate> updates = new Vector<SensorUpdate>();
+int latestUpdateId = 0;
 
 void setup()
 { 
-  size( 1280, 800 ); // set to DEFAULT_WINDOW_WIDTH and DEFAULT_WINDOW_HEIGHT
+  size( 1600, 1000 ); // to change, also set DEFAULT_WINDOW_WIDTH and DEFAULT_WINDOW_HEIGHT
   surface.setResizable(true);
+    
+  // int port = 12345;
+  // String ip = new String("192.168.1.5");
+  // UDP udpTX = new UDP(this,port,ip);
+  // udpTX.send("Hello",ip,port);
+  // println("sending done");
     
   background(20);
   stroke(0);
   noSmooth();
-  fill(20);
+  fill(0);
   rect( 0,0, width,height );  
-  //frameRate(100);
+  frameRate(240);
   
   tick = 0;
+  timePrev = millis();
   paused = false;
-  timeUpdate = new int[20];
-  timeIndex = 0;
-  fps = 0;
-  sensorAngles = new float[NUM_DOMINOS];
-  sensorVectors = new PVector[NUM_DOMINOS];
-  sensorActive = new float[NUM_DOMINOS];
-  sensorTap = new float[NUM_DOMINOS];
-  sensorErr = new float[NUM_DOMINOS];
-  sensorDMX = new float[NUM_DOMINOS];
-  modeStatus = new String[NUM_DOMINOS];
-  modeValue = new float[NUM_DOMINOS];
-  for (int i = 0; i < sensorVectors.length; i++) {
-    sensorAngles[i] = -1;
-    sensorVectors[i] = new PVector(0,1,0);
-    sensorActive[i] = 0;
-    sensorTap[i] = 0;
-    sensorDMX[i] = 0;
-    modeStatus[i] = new String();
-  }
+  states = new DominoState[NUM_DOMINOS];
+  for( int i=0; i<NUM_DOMINOS; i++ )
+    states[i] = new DominoState();
 
   postSetupTimer.schedule(new TimerTask() { public void run() { redraw();} }, (long) (1));
 
@@ -104,109 +132,199 @@ void setup()
   //oscP5 = new OscP5(this,SERVER_PORT); // -- OSCP5 LIBRARY --
   
   // Draw only when new data packets received
-  noLoop(); // must be last line
+  //noLoop(); // must be last line
 }
 
 void draw()
-{  
+{
+  //print("draw()"); print(drawCount);print(",");println(updates.size());
+  drawCount++;
+
   if( paused )
   {
+    while( updates.size()>0 )
+      updates.remove(0);
+    
     noStroke();  
     fill( 255,0,0 );
     rect( 4,4, width-80,10 );
     return;
   }
 
-  noStroke();  
-  fill( 20 );
-  rect( 0, 0, width-80, scopeVOffset );
-
-
-  if( (tick%40)==0 )
-  {
-    rect( 0, 0, width, scopeVOffset );
-    stroke( 255,255,255 );
-    rect(curWidth-70, 4, 64,15 );
-    fill(255,255,255);
-    text( "FPS "+nf(fps,1,1), curWidth-66, 16 );//
-  }
-  
-  
   if( (width!=curWidth) || (height!=curHeight) )
     onResize();
-
-  noStroke();  
-  fill( 20, 5 );
-  rect( 0,scopeVOffset-2, curWidth,scopeVSize+4 );  
-
-  fill( 20 );
-  rect( 0,scopeVSize+scopeVOffset+2, curWidth, curHeight-scopeVSize);
-  
-  textSize(11);
-  
-  for( int i = 0; i < sensorVectors.length; i++ )
-  {    
-    int hpos = 10 + (scopeHSize*i) + (5*i);
-    int vpos; // input range is -32768 to 32767, signed 16-bit    
-    int scopePos = (tick%scopeHSize);
-
     
+  for( int i=0; (i<5) && (updates.size()>0); i++ )
+  {
+    SensorUpdate update = updates.remove(0);
+    
+    int diff = (update.id-latestUpdateId); 
+    //print("draw() ... sensor update,");println(diff);
+    
+    int catchup = 5;
+    if( diff!=1 ) // out of order packet found, skip to latest
+      catchup = 0;
+      
+    while( updates.size()>catchup ) // too many packets found, skip ahead
+    {
+      update = updates.remove(0);
+      latestUpdateId=(update.id-1);
+    }
+      
+    if( update.id>latestUpdateId )
+      UpdateScopes( update );
+  }
+  
+  UpdateBoxes();
+}
+
+
+void UpdateScopes( SensorUpdate update )
+{
+  if( latestUpdateId < (update.id-scopeHSize) )
+    latestUpdateId = (update.id-scopeHSize);
+  //print(" UpdateScopes "); println(update.id - latestUpdateId);
+
+  //blendMode(SUBTRACT);
+  //fill( 1,1,1 );
+  //rect( 0,scopeVOffset-2, curWidth,scopeVSize+4 );  
+  //blendMode(BLEND);
+  //noStroke();  
+  //fill( 0,5 );
+  //rect( 0,scopeVOffset-2, curWidth,scopeVSize+4 );
+
+  for( int i=latestUpdateId; i < update.id; i++, latestUpdateId++ )
+  {
+    //int hpos = 10 + (scopeHSize*i) + (5*i);
+    //int scopePos = (update.id % scopeHSize);
+    
+    //blendMode(SUBTRACT);
+    //fill( 1,1,1 );
+    //rect( 0,scopeVOffset-2, curWidth,scopeVSize+4 );  
+    //blendMode(BLEND);
+    //fill( 0 );
+    //rect( hpos+scopePos,scopeVOffset-2, hpos+scopePos,scopeVSize+4 );
+    noStroke();  
+    fill( 0,4 );
+    rect( 0,scopeVOffset-2, curWidth,scopeVSize+4 );
+  }
+
+  for( int i = 0; i < NUM_DOMINOS; i++ )
+  {
+    SensorState state = update.states[i];
+    states[i].sensorActive = state.sensorActive;
+    states[i].sensorAngle = state.sensorAngle;
+    states[i].sensorAccel = state.sensorAccel;
+    states[i].sensorVeloc = state.sensorVeloc;
+    states[i].sensorDMX = state.sensorDMX;
+    states[i].sensorVolume = constrain(states[i].sensorVolume-0.02f,0,1) + (abs(state.sensorVeloc)*0.1);
+        
+    int hpos = 10 + (scopeHSize*i) + (5*i);
+    int vpos; // input range is -32768 to 32767, signed 16-bit
+    int scopePos = (update.id % scopeHSize);
+
     // Scope for X in yellow
-    vpos = round(scopeVOffset + (scopeVSize/2) + ((-sensorVectors[i].x) * (scopeVScale/2)));
-    noStroke();
-    fill( 20 );
-    rect( hpos+4, scopeVOffset-12, 32, 10);
-    fill( 255,255,64 );
-    text( nf(sensorVectors[i].x,1,2), hpos+4, scopeVOffset-2 );
-    stroke( 255,255,64);
-    point(hpos+scopePos, vpos);
-    //point(hpos+scopePos, vpos+1);
+//    vpos = round(scopeVOffset + (scopeVSize/2) + ((-state.sensorAccel.x) * (scopeVScale/2)));
+//    noStroke();
+//    fill( 20 );
+//    rect( hpos+4, scopeVOffset-12, 32, 10);
+//    fill( 255,255,64 );
+//    stroke( 255,255,64);
+//    point(hpos+scopePos, vpos);
 
     // Scope for Y in cyan
-    vpos = round(scopeVOffset + (scopeVSize/2) + ((-sensorVectors[i].y) * (scopeVScale/2)));
+//    vpos = round(scopeVOffset + (scopeVSize/2) + ((-state.sensorAccel.y) * (scopeVScale/2)));
+//    noStroke();
+//    fill( 20 );
+//    rect( hpos+54, scopeVOffset-12, 32, 10);
+//    fill( 128,255,255 );
+//    stroke( 128,255,255 );
+//    point(hpos+scopePos, vpos);
+
+    // Scope for velocity in magenta
+    vpos = round(scopeVOffset + (scopeVSize/2) + ((state.sensorVeloc) * (scopeVScale/2)));
+    //vpos = round(scopeVOffset + (scopeVSize/2) + ((-states[i].sensorVolume) * (scopeVScale/2)));
     noStroke();
     fill( 20 );
-    rect( hpos+54, scopeVOffset-12, 32, 10);
-    fill( 128,255,255 );
-    text( nf(sensorVectors[i].y,1,2), hpos+54, scopeVOffset-2 );
-    stroke( 128,255,255 );
+    rect( hpos+54, scopeVOffset-22, 32, 10);
+    //fill( 255,64,255 );
+    //stroke( 255,64,255 );
+    fill( 180,0,255 );
+    stroke( 180,0,255 );
     point(hpos+scopePos, vpos);
 
     // Scope for angle in white
-    vpos = round(scopeVOffset + (scopeVSize/2) + ((-sensorAngles[i]/3.14159) * (scopeVScale/2)));
+    vpos = round(scopeVOffset + (scopeVSize/2) + ((-state.sensorAngle/3.14159) * (scopeVScale/2)));
     noStroke();
     fill( 20 );
     rect( hpos+4, scopeVOffset-22, 32, 10);
     fill( 192,192,192 );
-    text( nf(sensorAngles[i],1,2), hpos+4, scopeVOffset-12 );
     stroke( 192,192,192 );
     point(hpos+scopePos, vpos);
     
-    if( sensorTap[i]>0.5f )
+    if( state.sensorTap>1.0f )
     {
-      //{ print("tap - "); println(i); }
-      stroke(255,0,0);
-      line( hpos+scopePos, (scopeVSize/2)+scopeVOffset-50, hpos+scopePos, (scopeVSize/2)+scopeVOffset+50 );
-      sensorTap[i]=0;
+      float tapHeight = ((state.sensorTap-0.5)/20) * (scopeVSize/2);
+      float tapVPos = (scopeVSize/2)+scopeVOffset;
+      stroke(255,255,255);
+      line( hpos+scopePos, tapVPos-tapHeight, hpos+scopePos, tapVPos+tapHeight );
+      state.sensorTap=0;
     }
     
-    if( sensorErr[i]>0.5f )
+    if( state.sensorErr>0.5f )
     {
       fill(255,0,0);
-      if( ((sensorErr[i]>0.5f) && (sensorErr[i]<1.5f)) || (sensorErr[i]>2.5) )
+      if( ((state.sensorErr>0.5f) && (state.sensorErr<1.5f)) || (state.sensorErr>2.5) )
         text( "ERROR: SENSOR", hpos+10, scopeVSize+scopeVOffset-16 );
-      if( ((sensorErr[i]>1.5f) && (sensorErr[i]<2.5f)) || (sensorErr[i]>2.5) )
+      if( ((state.sensorErr>1.5f) && (state.sensorErr<2.5f)) || (state.sensorErr>2.5) )
         text( "ERROR: MUX", hpos+10, scopeVSize+scopeVOffset-32 );
-    }
-    
+    } 
+  }
+}
 
+void UpdateBoxes()
+{
+  //println("UpdateBoxes()");
+  noStroke();  
+  fill( 20 );
+  rect( 0, 0, width-80, scopeVOffset );
+
+  fill( 0 ); //20
+  rect( 0,scopeVSize+scopeVOffset+2, curWidth, curHeight-scopeVSize);
+  
+  textSize(11);
+  
+  for( int i = 0; i < NUM_DOMINOS; i++ )
+  {
+    DominoState state = states[i];
+
+    int hpos = 10 + (scopeHSize*i) + (5*i);
+
+    noStroke();
+
+    // Scope for X in yellow
+    fill( 255,255,64 );
+    text( nfx(state.sensorAccel.x,1,2), hpos+4, scopeVOffset-2 );
+
+    // Scope for Y in cyan
+    fill( 128,255,255 );
+    text( nfx(state.sensorAccel.y,1,2), hpos+54, scopeVOffset-2 );
+
+    // Scope for velocity in magenta
+    fill( 255,64,255 );
+    text( nfx(state.sensorVeloc,1,3), hpos+54, scopeVOffset-12 );
+
+    // Scope for angle in white
+    fill( 192,192,192 );
+    text( nfx(state.sensorAngle,1,2), hpos+4, scopeVOffset-12 );
+        
     // Draw rotated boxes for the Dominos
     // Pivot is the rotation center of the box
     pivot.x = (scopeHSize/2) + 10 + (scopeHSize*i) + (5*i);
     pivot.y = curHeight-28;
     // Horizontal Dir and Vertical Dir are unit vectors pointing along the width and height of the box
-    upperDir.x = -sin(sensorAngles[i]); //*1.2f
-    upperDir.y = -cos(sensorAngles[i]); //*1.2f
+    upperDir.x = -sin(states[i].sensorAngle); //*1.2f
+    upperDir.y = -cos(state.sensorAngle); //*1.2f
     leftDir.x  = -upperDir.y; 
     leftDir.y  =  upperDir.x;
     // Thanks for making vector operations so gross, Processing
@@ -215,14 +333,22 @@ void draw()
     upperRight = PVector.add( PVector.sub(pivot,PVector.mult(leftDir,(housingHalfWidth))), PVector.mult(upperDir,(housingUpperHeight)) ); 
     upperLeft  = PVector.add( PVector.add(pivot,PVector.mult(leftDir,(housingHalfWidth))), PVector.mult(upperDir,(housingUpperHeight)) ); 
     
-    float u = sensorActive[i];
-    float dmx = lerp( 40,255, sensorDMX[i] );
+    float u = constrain( state.sensorActive*20, 0.0, 1.0);
+    float dmx = lerp( 40,255, state.sensorDMX );
     stroke( 255*u + 192*(1-u), 192*(1-u), 192*(1-u) );
     fill( dmx, dmx, dmx ); 
     quad( lowerLeft.x, lowerLeft.y, lowerRight.x, lowerRight.y, upperRight.x, upperRight.y, upperLeft.x, upperLeft.y);
     fill(20,20,20);
     ellipse( pivot.x, pivot.y, 5, 5 );
 
+    // Mode text
+    fill(255,255,255);
+    text( state.modeStatus, hpos+10, scopeVSize+scopeVOffset+16 );
+    text( str(state.modeValue), hpos+10, scopeVSize+scopeVOffset+30 );
+
+    // Column number text
+    text( str(i), pivot.x-3, pivot.y+housingLowerHeight+15 );
+  
     // Vertical dividing line
     if( i>0 )
     {
@@ -233,19 +359,46 @@ void draw()
       line( hpos-1, scopeVOffset, hpos+1, scopeVOffset ); // tick at +1
       line( hpos-1, scopeVSize+scopeVOffset, hpos+1, scopeVSize+scopeVOffset ); // tick at -1
     }
-    
-    // Mode text
-    fill(255,255,255);
-    text( modeStatus[i], hpos+10, scopeVSize+scopeVOffset+16 );
-    text( str(modeValue[i]), hpos+10, scopeVSize+scopeVOffset+30 );
-
-    // Column number text
-    text( str(i), pivot.x-3, pivot.y+housingLowerHeight+15 );
   }
-  
+
+
   tick = (tick+1);
+  if( (tick%40)==0 )
+    UpdateFPS();
+    
+  rect( 0, 0, width, scopeVOffset );
+  stroke( 128,64,64 );
+  rect(curWidth-50, curHeight-60, 46, 56);
+  fill( 128,64,64 );
+  text( "FPS\n"+nf(messageFps,1,1)+"\n"+nf(drawFps,1,1), curWidth-44, curHeight-44 );//
 }
 
+void UpdateFPS()
+{
+  int timeNow = millis();
+  int timeDiff = timeNow - timePrev;
+  if( timeDiff>0 )
+  {
+    int messageDiff = messageCount-messageCountPrev;
+    int drawDiff = drawCount-drawCountPrev;
+    float messageFpsCur = 1000.0f * (messageDiff / (float)timeDiff);
+    float drawFpsCur = 1000.0f * (drawDiff / (float)timeDiff);
+    timePrev = timeNow;
+    messageCountPrev = messageCount;
+    drawCountPrev = drawCount;
+    
+    messageFps = constrain( (0.5f*messageFps) + (0.5f*messageFpsCur), 0, 1000 );
+    drawFps = constrain( (0.5f*drawFps) + (0.5f*drawFpsCur), 0, 1000 );
+  }
+  
+//  timeIndex = (timeIndex+1) % timeUpdate.length;
+//  int timeOldest = timeUpdate[timeIndex];
+//  timeUpdate[timeIndex] = timeNow;
+//  float fpsNow = timeUpdate.length * (1000.0f / (timeNow-timeOldest));
+//  if( timeIndex == 0 )
+//    fps = fpsNow; // clears problems when fps becomes denormal or infinity
+//  else fps = (0.95f*fps) + (0.05f*fpsNow);
+}
 
 void onResize()
 {
@@ -269,18 +422,13 @@ void keyPressed() {
   }
 }
 
-void UpdateFPS()
+String nfx( float x, int a, int b )
 {
-  int timeNow = millis();
-  int timeOldest = timeUpdate[timeIndex];
-  timeUpdate[timeIndex] = timeNow;
-  timeIndex = (timeIndex+1) % timeUpdate.length;
-  float fpsNow = timeUpdate.length * (1000.0f / (timeNow-timeOldest));
-  if( timeIndex == 0 )
-    fps = fpsNow; // clears problems when fps becomes denormal or infinity
-  else fps = (0.95f*fps) + (0.05f*fpsNow);
+  String retval;
+  if( x<0 ) retval = nf(x,a,b);
+  else retval = (new String("  ")) + nf(x,a,b);
+  return retval;
 }
-
 
 // -- UDP LIBRARY --
 // fields within the packet data start at 32-bit (four byte) boundaries;
@@ -290,52 +438,79 @@ int maskOffsetDWord = 0xFFFFFFFC; // zeroes two lowest bits, yields a multiple o
 // -- UDP LIBRARY --
 void ProcessMessage( String tag, ByteBuffer buf, int argIndex )
 {
-  UpdateFPS();
+  //println("ProcessMessage()");
+  messageCount++;
   
   if( tag.equals( "/diag" ) )
   {
-    int fieldCount = 6;
+    SensorUpdate update = new SensorUpdate();
+
+    int elementCount = 7;
+    int preambleCount = 1;
+    int updateId = (int)getFloatArg( buf, argIndex+0 );
+    
+    //if( updateId!=(latestUpdateId+1) )
+    //{ print("packet out of order "); print(latestUpdateId); print(" -> "); println(updateId); }
+    
+    update.id = updateId;
+    
+    //messagePrev = messageCur;
+    
     for( int i=0; i<NUM_DOMINOS; i++ )
     {
-      int a = (i * fieldCount * 4);
+      SensorState state = update.states[i];
+      
+      int a = 4 * ( preambleCount + (i * elementCount) );
       float vecAngle = getFloatArg( buf, argIndex+a+0 );
       float vecX     = getFloatArg( buf, argIndex+a+4 );
       float vecY     = getFloatArg( buf, argIndex+a+8 );
       float active   = getFloatArg( buf, argIndex+a+12 );
       float dmx      = getFloatArg( buf, argIndex+a+16 );
       float err      = getFloatArg( buf, argIndex+a+20 );
+      float veloc    = getFloatArg( buf, argIndex+a+24 );
       if( err>0.5 )
-      {  print("err - "); println(i);  }
-      sensorAngles[i] = vecAngle;
-      sensorVectors[i].x = vecX;
-      sensorVectors[i].y = vecY;
-      sensorActive[i] = sensorActive[i]-0.02f;
-      if( active>10.0f )
-      {
-        //{  print("tap - "); println(i);  }
-        sensorTap[i] = 1.0f;
-      }
+      {  print(" err_"); print(i);  }
+      state.sensorUpdateId = updateId;
+      state.sensorAngle = vecAngle;
+      state.sensorAccel.x = vecX;
+      state.sensorAccel.y = vecY;
+      state.sensorVeloc = veloc;
+      state.sensorErr = err;
+      state.sensorDMX = dmx;
       
-      if( active>0.5f )
-        sensorActive[i] = 1.0f;
-      else if( sensorActive[i]<0.0f )
-        sensorActive[i] = 0.0f;
-      sensorDMX[i] = dmx;
-      sensorErr[i] = err;
+      if( active>=0.5f )
+        state.sensorActive = 1.0;
+      else
+        state.sensorActive = 0.0;
+        
+      if( active>=1.0f )
+      {
+        //jprint("tap "); println(active);
+        state.sensorTap = active;
+      }
+      else
+        state.sensorTap = 0.0f;
     }
+    updates.add(update);
   }
   else if( tag.equals( "/mode" ) )
-  {
+  {    
     int a = 0;
     int index        = getIntArg( buf, argIndex+a+0 );
     String s         = getStringArg( buf, argIndex+a+4 );
     int len = (s.length()+1); // includes trailing zero
     int n = (len+3)&maskOffsetDWord;
-    modeStatus[index] = s;
-    modeValue[index]  = getFloatArg( buf, argIndex+a+4+n );
+    
+    DominoState state = states[index];
+    state.modeStatus = s;
+    state.modeValue  = getFloatArg( buf, argIndex+a+4+n );
+  }
+  else if( tag.equals( "/broadcast" ) )
+  {
+    println("...polo...\n");
   }
 
-  redraw();
+  //redraw();
 }
 
 // -- UDP LIBRARY --
@@ -373,7 +548,7 @@ float getFloatArg( ByteBuffer buf, int index )
 
 // -- UDP LIBRARY --
 void receive( byte[] data )
-{ 
+{  
   ByteBuffer buf = ByteBuffer.wrap(data);
   
   // Extract the OSC address tag from the data
@@ -387,7 +562,9 @@ void receive( byte[] data )
   if( (typeTagBegin<data.length) && (data[typeTagBegin]==',') )
   {
     for( int i=typeTagBegin; (i<data.length) && (data[i]!=0); i++ )
+    {
       typeTagEnd++;
+    }
   }
 
   // Extract the OSC arguments
@@ -417,9 +594,9 @@ void oscEvent(OscMessage oscMessage) {
       float vecY = oscMessage.get(a+2).floatValue();
       float active = oscMessage.get(a+3).floatValue();
       float dmx = oscMessage.get(a+4).floatValue();
-      sensorAngles[i] = vecAngle;
-      sensorVectors[i].x = vecX;
-      sensorVectors[i].y = vecY;
+      sensorAngle[i] = vecAngle;
+      sensorAccel[i].x = vecX;
+      sensorAccel[i].y = vecY;
       sensorActive[i] = sensorActive[i]-0.02f;
       if( active>0.5f )
         sensorActive[i] = 1.0f;
@@ -466,8 +643,8 @@ void oscEvent(OscMessage oscMessage) {
     
     int hposArrow = (scopeHSize/2) + 10 + (scopeHSize*i) + (5*i);
     int vposArrow = 720;
-    hpos = round(hposArrow + (sensorVectors[i].x * scopeHScale/2));
-    vpos = round(vposArrow + (sensorVectors[i].y * scopeHScale/2));
+    hpos = round(hposArrow + (sensorAccel[i].x * scopeHScale/2));
+    vpos = round(vposArrow + (sensorAccel[i].y * scopeHScale/2));
 
     // Arrow indicator line and dot
     noStroke();

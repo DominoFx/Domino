@@ -1,9 +1,14 @@
-#killall domino
 
-#echo sleeping for ten seconds
-#sleep 10
+#
+# Launch program
+#
 
 cd /home/pi/Domino
-./dist/Release/GNU-Linux/domino -m  2>>./error_dominoMaster.txt
+echo `date` >>./error_domino_master.txt
+chmod 777 ./dist/Release/GNU-Linux/domino
+./dist/Release/GNU-Linux/domino -m 2>>./error_domino_master.txt
 
-read -n 1 -s
+
+# Wait for user input, to prevent window from closing after ctrl-c,
+# if lxterminal was launched at startup, but this never worked, hmm
+#read -n 1 -s

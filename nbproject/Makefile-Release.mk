@@ -40,6 +40,7 @@ OBJECTFILES= \
 	${OBJECTDIR}/LISD3H.o \
 	${OBJECTDIR}/I2CBus.o \
 	${OBJECTDIR}/OscController.o \
+	${OBJECTDIR}/dmx/DominoParams.o \
 	${OBJECTDIR}/dmx/DominoState.o \
 	${OBJECTDIR}/dmx/DominoController.o \
 	${OBJECTDIR}/dmx/DominoPlayer.o \
@@ -69,15 +70,17 @@ FFLAGS=
 ASFLAGS=
 
 # Link Libraries and Options
-#LDLIBSOPTIONS=/usr/local/lib/libboost_system.so.1.62.0
+LDLIBSOPTIONS=/usr/local/lib/libboost_system.so.1.62.0
 
 # Build Targets
 .build-conf: ${BUILD_SUBPROJECTS}
 	"${MAKE}"  -f nbproject/Makefile-${CND_CONF}.mk ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}/domino
 
+${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}/domino: /usr/local/lib/libboost_system.so.1.62.0
+
 ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}/domino: ${OBJECTFILES}
 	${MKDIR} -p ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}
-	${LINK.cc} -o ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}/domino ${OBJECTFILES} ${LDLIBSOPTIONS} -pthread
+	${LINK.cc} -o ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}/domino ${OBJECTFILES} ${LDLIBSOPTIONS} -lwiringPi -pthread -lusb
 
 ${OBJECTDIR}/_ext/4db70e6c/jsoncpp.o: ../jsoncpp/jsoncpp.cpp
 	${MKDIR} -p ${OBJECTDIR}/_ext/4db70e6c
@@ -103,6 +106,11 @@ ${OBJECTDIR}/OscController.o: OscController.cpp
 	${MKDIR} -p ${OBJECTDIR}
 	${RM} "$@.d"
 	$(COMPILE.cc) -O2 -I. -I../jsoncpp -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/OscController.o OscController.cpp
+
+${OBJECTDIR}/dmx/DominoParams.o: dmx/DominoParams.cpp
+	${MKDIR} -p ${OBJECTDIR}/dmx
+	${RM} "$@.d"
+	$(COMPILE.cc) -O2 -I. -I../jsoncpp -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/dmx/DominoParams.o dmx/DominoParams.cpp
 
 ${OBJECTDIR}/dmx/DominoState.o: dmx/DominoState.cpp
 	${MKDIR} -p ${OBJECTDIR}/dmx
@@ -175,6 +183,7 @@ ${OBJECTDIR}/osc/OscTypes.o: osc/OscTypes.cpp
 # Clean Targets
 .clean-conf: ${CLEAN_SUBPROJECTS}
 	${RM} -r ${CND_BUILDDIR}/${CND_CONF}
+	${RM} -r ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}/libboost_system.so.1.62.0
 	${RM} ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}/domino
 
 # Subprojects

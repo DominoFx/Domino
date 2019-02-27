@@ -12,6 +12,7 @@
  */
 
 #include "BMA220.h"
+#include "dmx/DominoParams.h"
 #include <stdio.h>
 #include <sys/ioctl.h>
 
@@ -23,36 +24,35 @@
 
 #define BMA220_REG_WHO_AM_I    0x00
 
-BMA220::BMA220() {
+BMA220::BMA220(DominoParams& params) :
+  m_params(params)
+{
 }
 
 BMA220::~BMA220() {
 }
 
-int BMA220::IsAvailable( I2CBus* bus, SensorParams* params )
+int BMA220::IsAvailable( I2CBus* bus, SensorAddress* address )
 {
     int result = 0;
 
-    uint8_t addr = BMA220_ADDRESS_I2C;
-
-    int muxAddress = params->muxAddress;
-    int muxField = params->muxField;
+    address->address = BMA220_ADDRESS_I2C;
 
     // Toggle the mux to the correct device
-    bus->WriteGlobal( muxAddress, muxField );
+    bus->WriteGlobal( address->muxAddress, address->muxField );
 
     // Check the mux toggled correctly
     uint8_t muxField_check;
-    bus->ReadGlobal( muxAddress, &muxField_check );
-    if( muxField_check != muxField )
+    bus->ReadGlobal( address->muxAddress, &muxField_check );
+    if( muxField_check != address->muxField )
     {
         printf( "ERROR: BMA220::IsPresent() mux check got %i, expected %i\n",
-            (int)(muxField_check), (int)(muxField) );
+            (int)(muxField_check), (int)(address->muxField) );
         result = 1; // error flag
     }
 
     // Doesn't work as expected, seems to always returns 1
-    int isPresent = bus->IsPresent( addr );
+    int isPresent = bus->IsPresent( address->address );
     if( isPresent==0 )
     {
         result = 2; // error flag
@@ -60,43 +60,44 @@ int BMA220::IsAvailable( I2CBus* bus, SensorParams* params )
 
     // Read the useless WhoAmI register ... TWICE ... for confirmation
     uint8_t whoAmI;
-    bus->ReadSingle( addr, BMA220_REG_WHO_AM_I, &whoAmI ); // first read fails, BMA220 bug
-    bus->ReadSingle( addr, BMA220_REG_WHO_AM_I, &whoAmI );
+    bus->ReadSingle( address->address, BMA220_REG_WHO_AM_I, &whoAmI ); // first read fails, BMA220 bug
+    bus->ReadSingle( address->address, BMA220_REG_WHO_AM_I, &whoAmI );
     if( whoAmI != 0xDD )
     {
         result = 3; // error flag
     }
 
     // Toggle the mux off
-    bus->WriteGlobal( muxAddress, 0 );
+    bus->WriteGlobal( address->muxField, 0 );
 
     return (result==0? 1:0);
 }
 
-int BMA220::Init( I2CBus* bus, SensorParams* params )
+int BMA220::Init( I2CBus* bus, SensorAddress* address )
 {
     int result = 0;
 
-    uint8_t addr = BMA220_ADDRESS_I2C;
+    m_address = (*address);
 
-    m_params = (*params);
+    m_address.address = BMA220_ADDRESS_I2C;
+
 
     // Toggle the mux to the correct device
-    bus->WriteGlobal( m_params.muxAddress, m_params.muxField );
+    bus->WriteGlobal( m_address.muxAddress, m_address.muxField );
 
     // Check the mux toggled correctly
     uint8_t muxField_check;
-    bus->ReadGlobal( m_params.muxAddress, &muxField_check );
-    if( m_params.muxField != muxField_check )
+    bus->ReadGlobal( m_address.muxAddress, &muxField_check );
+    if( m_address.muxField != muxField_check )
     {
         printf( "ERROR: BMA220::Init() mux check got %i, expected %i\n",
-            (int)(muxField_check), (int)(m_params.muxField) );
+            (int)(muxField_check), (int)(m_address.muxField) );
         result = 1; // error flag
     }
 
     // Read the useless WhoAmI register just to make sure we're synchronized
     uint8_t whoAmI;
-    bus->ReadSingle( addr, BMA220_REG_WHO_AM_I, &whoAmI );
+    bus->ReadSingle( m_address.address, BMA220_REG_WHO_AM_I, &whoAmI );
     if( whoAmI != 0xDD )
     {
         printf( "ERROR: 0x%X <- BMA220::Init() WhoAmI, expected 0xDD\n", (int)whoAmI );
@@ -104,11 +105,10 @@ int BMA220::Init( I2CBus* bus, SensorParams* params )
     }
 
     // Toggle the mux off
-    bus->WriteGlobal( m_params.muxAddress, 0 );
+    bus->WriteGlobal( m_address.muxAddress, 0 );
 
     printf( "DominoFX: Initialized BMA220 motion sensor at index %i, %s ... \n",
-        m_params.index, (result==0?"ok":"failed") );
-
+        m_address.index, (result==0?"ok":"failed") );
 
     return result;
 }
@@ -121,40 +121,27 @@ int BMA220::Sample( I2CBus* bus )
     std::lock_guard<std::mutex> lock(m_mutex);
 
     // Toggle the mux to the correct device 
-    bus->WriteGlobal( m_params.muxAddress, m_params.muxField );
-
-    // Check the mux toggled correctly
-    //uint8_t muxField_check;
-    //bus->ReadGlobal( m_params.muxAddress, &muxField_check );
-    //if( m_params.muxField != muxField_check )
-    //{
-    //    printf( "ERROR: BMA220::GetData() mux check got %i, expected %i\n",
-    //        (int)(muxField_check), (int)(m_params.muxField) );
-    //    result = 1; // error flag
-    //}
-
-    // Read sample
-    uint8_t addr = BMA220_ADDRESS_I2C;
+    bus->WriteGlobal( m_address.muxAddress, m_address.muxField );
 
     // Read the useless WhoAmI register to ensure we're synchronized
     // This is required due to apparent hardware glitch with the BMA220
     uint8_t whoAmI;
-    bus->ReadSingle( addr, BMA220_REG_WHO_AM_I, &whoAmI );
+    bus->ReadSingle( m_address.address, BMA220_REG_WHO_AM_I, &whoAmI );
 
     uint8_t dataByte;
-    bus->ReadSingle( addr, BMA220_REG_X, &dataByte );
+    bus->ReadSingle( m_address.address, BMA220_REG_X, &dataByte );
     m_sample.accelSum.x += dataByte;
 
-    bus->ReadSingle( addr, BMA220_REG_Y, &dataByte );
+    bus->ReadSingle( m_address.address, BMA220_REG_Y, &dataByte );
     m_sample.accelSum.y += dataByte;
 
-    bus->ReadSingle( addr, BMA220_REG_Z, &dataByte );
+    bus->ReadSingle( m_address.address, BMA220_REG_Z, &dataByte );
     m_sample.accelSum.z += dataByte;
 
     m_sample.count += 1;
     
     // Toggle the mux off
-    bus->WriteGlobal( m_params.muxAddress, 0 );
+    bus->WriteGlobal( m_address.muxAddress, 0 );
 
     return result;
 }
@@ -179,7 +166,9 @@ const SensorData* BMA220::GetData()
 
         m_data.acceleration = accelVal;
 
+        // Set position value
         // TODO: Calculate position from acceleration, with gravity compensation
+        //m_data.position = accelVal;
 
         // Set velocity value; difference from current to previous value
         DVec3_t accelDif(accelVal);
@@ -195,9 +184,9 @@ const SensorData* BMA220::GetData()
     return &m_data;
 }
 
-const SensorParams* BMA220::GetParams()
+const SensorAddress* BMA220::GetAddress()
 {
-    return &m_params;
+    return &m_address;
 }
 
 void BMA220::DebugPrint()
@@ -207,7 +196,7 @@ void BMA220::DebugPrint()
     std::lock_guard<std::mutex> lock(m_mutex);
 
     WVec3_t& v = m_sample.accelSum;
-    printf( "  BMA220 - Mux 0x%X, Slot 0x%X\n", m_params.muxAddress, m_params.muxField );
+    printf( "  BMA220 - Mux 0x%X, Slot 0x%X\n", m_address.muxAddress, m_address.muxField );
     printf( "  Queue:\t\t %i\n", (int)(m_sample.count) );
     printf( "  Accel avg:\t\t (%i,%i,%i)\n", (int)(v.x), (int)(v.y), (int)(v.z) );
 }

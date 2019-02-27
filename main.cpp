@@ -7,6 +7,17 @@ using namespace std;
 
 int main(int argc, char** argv)
 {
+    //OscBroadcaster broadcast;
+    //int result = broadcast.Init( 12345 ); //broadcast.Init( "192.168.0.119", 12345 );
+    //printf( "DominoFX: broadcast test init %s...\n", (result?"ok":"fail") );
+    //while( true )
+    //{
+    //    int testdata[] = {1,2,3};
+    //    std::string testtag("/broadcast");
+    //    printf( "DominoFX: ...marco...\n" );
+    //    broadcast.Send( testtag, 3, testdata );
+    //    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    //}
     printf( "DominoFX: Creating DominoController...\n" );
     DominoController controller;
     

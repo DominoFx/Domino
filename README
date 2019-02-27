@@ -1,4 +1,5 @@
-Config.json
+Configuration file:
+config_setup.json
 
 "dmxInterface" can be: "pro"(default) or "open"
 "axis" can be: 0 = X, 1 = Y(default), 2 = Z

@@ -1,0 +1,9 @@
+{
+    "name":"FLUTE STATION - ID 1",
+    "id":1,
+    "sequence":
+    [
+        { "fade":"02s 000", "sustain":"05s 500", "dmx":[ {"0":150} ] },
+        { "fade":"06s 000", "sustain":"00s 000", "dmx":[] }    
+    ]
+}

@@ -5,6 +5,7 @@
                    displayName="Header Files"
                    projectFiles="true">
       <itemPath>BMA220.h</itemPath>
+      <itemPath>dmx/DominoParams.h</itemPath>
       <itemPath>dmx/DominoState.h</itemPath>
       <itemPath>dmx/DominoController.h</itemPath>
       <itemPath>dmx/DominoPlayer.h</itemPath>
@@ -51,6 +52,7 @@
                    displayName="Source Files"
                    projectFiles="true">
       <itemPath>BMA220.cpp</itemPath>
+      <itemPath>dmx/DominoParams.cpp</itemPath>
       <itemPath>dmx/DominoState.cpp</itemPath>
       <itemPath>dmx/DominoController.cpp</itemPath>
       <itemPath>dmx/DominoPlayer.cpp</itemPath>
@@ -115,6 +117,10 @@
       <item path="OscController.cpp" ex="false" tool="1" flavor2="0">
       </item>
       <item path="OscController.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="dmx/DominoParams.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="dmx/DominoParams.h" ex="false" tool="3" flavor2="0">
       </item>
       <item path="dmx/DominoState.cpp" ex="false" tool="1" flavor2="0">
       </item>
@@ -234,6 +240,10 @@
       <item path="OscController.cpp" ex="false" tool="1" flavor2="0">
       </item>
       <item path="OscController.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="dmx/DominoParams.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="dmx/DominoParams.h" ex="false" tool="3" flavor2="0">
       </item>
       <item path="dmx/DominoState.cpp" ex="false" tool="1" flavor2="0">
       </item>

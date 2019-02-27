@@ -1,10 +1,13 @@
-#killall sclang
-#killall scsynth
 
-#echo sleeping for five seconds...
-#sleep 5
+#
+# Launch program
+#
 
 cd /home/pi/Domino
-sclang ./SuperCollider/demo_181012-mother.scd  2>>error_soundMaster.txt
+echo `date` >>./error_sound_master.txt
+sclang ./SuperCollider/mother_181209.scd 2>>./error_sound_master.txt
 
-read -n 1 -s
+
+# Wait for user input; if launched via lxterminal,
+# should prevent window from closing on ctrl-c, but never worked, hmm
+#read -n 1 -s

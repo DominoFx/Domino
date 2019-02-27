@@ -1,6 +1,7 @@
 #ifndef DOMINOCONTROLLER_H
 #define DOMINOCONTROLLER_H
 
+#include "DominoParams.h"
 #include "DominoState.h"
 #include "DominoPlayer.h"
 #include "enttecdmxusb.h"
@@ -29,22 +30,46 @@ class DominoController {
 public:
     typedef std::chrono::time_point<std::chrono::system_clock> TimePoint;
     typedef std::chrono::duration<double> Duration;
+    typedef struct { int weekday, hour, minute, second; } Clock;
 
     DominoController();
     virtual ~DominoController();
 
-    bool Init( int argc, char** argv );
-    void Update();
+    bool  Init( int argc, char** argv );
+    int   Load( Json::Value& jsonRoot );
     
+    // Update, runs each frame
+    void  Update();
+    
+    // Parameters
     DominoParams& GetParams();
-    int GetDominoTotalCount();
+    int   GetDominoTotalCount();
+    int   GetDominoLocalCount();
+    int   GetUpdateCount();
+
+    // Worker registration, only in Master mode
+    int GetWorkerCount();
+    OscController* GetWorkerSock( int index );
     
-    int RegisterMasterToWorkerCallback( const char* tag, OscCallback func, void* param );
-    int RegisterWorkerToMasterCallback( const char* tag, OscCallback func, void* param );
-    int RegisterSoundToMasterCallback( const char* tag, OscCallback func, void* param );
-    int RegisterSoundToWorkerCallback( const char* tag, OscCallback func, void* param );
+    // Modes
+    int   GetSleep();
+
+    // Diagnostics
+    enum { debug_verbose=1, debug_diag_server=2, debug_diag_stream=4 };
+    int   GetDebugFlags();
+    void  SetDebugFlags( int flags );
+    bool  GetDebugVerbose();
+    bool  GetDebugDiagServer();
+    bool  GetDebugDiagStream();
+    
+    int   RegisterMasterToWorkerCallback( const char* tag, OscCallback func, void* param );
+    int   RegisterWorkerToMasterCallback( const char* tag, OscCallback func, void* param );
+    int   RegisterSoundToMasterCallback( const char* tag, OscCallback func, void* param );
+    int   RegisterSoundToWorkerCallback( const char* tag, OscCallback func, void* param );
 
 protected:
+    bool m_initialized;
+
     // Master Mode or Worker Mode
     DominoSensorMaster* m_sensorMaster;
     DominoPlayerMaster* m_playerMaster;
@@ -56,30 +81,40 @@ protected:
     OscListener m_workerToMasterListener;
     OscListener m_soundToMasterListener;
     OscListener m_soundToWorkerListener;
+    OscListener m_diagToWorkerListener; // to update configuration params via OSC
 
     // Params
     DominoParams m_params;
+    void ProcessParamChange( const char *argsData, int argsSize, const IpEndpointName& remoteEndpoint );    
+    static void ProcessParamChange( const char *argsData, int argsSize, const IpEndpointName& remoteEndpoint, void* param );
+    int m_workerCount;
 
     // Timing
+    int m_updateCount;
     TimePoint m_lastUpdate;
     TimePoint m_lastConfig;
     float m_continuousDelay;
 
+    // Modes
+    int m_sleep;
+
     // Diagnostics
-    OscController m_diagServer;
-    std::vector<float> m_diagData;
-    bool m_debugOutput;
     int m_debugCmd;
+    int m_debugFlags;
+    
+    // Watchdog
+    OscController* m_watchdogServer;
         
     // Input handling
     std::thread m_inputThread;
     int StartInputThread();
-    static void InputThread( DominoController* parent );
+    void InputThread();
+    static void InputThreadBootstrap( DominoController* parent ) {parent->InputThread();}
     
     // Friends
     friend class DominoSensorAgent;
-    friend class DominoSensorMaster;
-    friend class DominoSensorWorker;
+    //friend class DominoSensorMaster;
+    //friend class DominoSensorWorker;
     friend class DominoPlayerAgent;
     friend class DominoPlayerMaster;
     friend class DominoPlayerWorker;
@@ -93,9 +128,11 @@ protected:
 
 class DominoSensorAgent {
 public:
+    typedef DominoController::Clock Clock;
     DominoSensorAgent( DominoController& context );
 
     virtual bool Init();
+    virtual void Reload() = 0;
 
 protected:
     DominoController& m_context;
@@ -114,20 +151,44 @@ public:
     virtual ~DominoSensorMaster();
 
     virtual bool Init();
+    virtual void Reload();
     virtual void Update();
     
-    int GetDominoTotalCount();
+    // Worker registration
+    int GetWorkerCount();
+    OscController* GetWorkerSock( int index );
+    bool RegisterWorker( const char* workerAddress, int workerPort, int workerIndex );
+
+    // Config
     int SendConfig();
+    int GetSleep();
+
+    // Helpers
+    void UpdateClock();
+    void UpdateSleep();
 
 private:
     bool m_initialized;
 
-    // Configuration
-    int configWorkerCount;
-    char** configWorkerAddress;
+    // Workers
+    char** m_workerAddress;
+    std::vector<OscController*> m_workerSock;
+    int m_workerCount;
+    int m_workersConfigured;
+    
+    // Activity
+    float m_activity;
 
-    // OSC server, transmits heartbeat and config to OSC
-    OscController m_soundServer;
+    // Sleep
+    int m_sleep;
+    Clock m_clock;
+
+    // Hearbeat
+    int m_heartbeatRampout;
+    int m_heartbeatCount;
+
+    // Sound
+    OscController* m_soundServer;
     int m_soundConfigured;
 
     // Local methods
@@ -135,6 +196,8 @@ private:
     static void ProcessHeartbeat( const char *argsData, int argsSize, const IpEndpointName& remoteEndpoint, void* param );
     void ProcessConfirmSound( const char *argsData, int argsSize, const IpEndpointName& remoteEndpoint );
     static void ProcessConfirmSound( const char *argsData, int argsSize, const IpEndpointName& remoteEndpoint, void* param );
+    void ProcessConfigDomino( const char *argsData, int argsSize, const IpEndpointName& remoteEndpoint );
+    static void ProcessConfigDomino( const char *argsData, int argsSize, const IpEndpointName& remoteEndpoint, void* param );
 };
 
 
@@ -149,41 +212,66 @@ public:
     virtual ~DominoSensorWorker();
 
     virtual bool Init();
+    virtual void Reload();
     virtual void Update( DmxFrame& dmxout );
     
     DominoState* GetState( int index );
     ISensor* GetSensor( int index );
-    int SendConfig();
+    bool IsRemote();
+    
+    // Config
+    int  SendConfig();
+    int  GetSleep();
 
 private:
     bool m_initialized;
 
-    // Sound handling
-    OscController m_soundServer;
-    int m_soundConfigured;
-    int m_multiplexerAvailable1;
-    int m_multiplexerAvailable2;
+    // Diagnostics
+    OscController* m_diagServer;
+    std::vector<float> m_diagData;
+    int m_diagMode;
 
-    // Hearbeat handling
-    OscController m_heartbeatServer;
-    int m_heartbeatCountdown;
-    int m_heartbeatTotal;
+    // Config handling
+    OscBroadcaster* m_masterBroadcast;
+    OscController* m_masterServer;
+    int m_masterRemote;
+
+    // Activity
     float m_activity;
+    
+    // Sleep
+    int m_sleep;
+    Clock m_clock;
 
+    // Sound handling
+    OscController* m_soundServer;
+    int m_soundConfigured;
+    int m_multiplexerAvailable[2];
+
+    // Timing
+    int m_updateCount;
+    
     // Sensor and DMX data
+    int m_dominoCount;
     std::vector<DominoState*> m_state;
     
     // Sensor Thread
-    std::thread m_sensorThread;
     I2CBus m_bus;
+    std::thread m_sensorThread;
+    std::mutex m_mutex;
     std::vector<ISensor*> m_sensor;
 
     // Local methods
     bool Update(uint8_t sensorIndex);
     int StartSensorThread();
-    static void SensorThread( DominoSensorWorker* parent );
+    void SensorThread();
+    static void SensorThreadBootstrap( DominoSensorWorker* parent ) {parent->SensorThread();}
+    void ProcessHeartbeat( const char *argsData, int argsSize, const IpEndpointName& remoteEndpoint );
+    static void ProcessHeartbeat( const char *argsData, int argsSize, const IpEndpointName& remoteEndpoint, void* param );
     void ProcessConfirmSound( const char *argsData, int argsSize, const IpEndpointName& remoteEndpoint );
     static void ProcessConfirmSound( const char *argsData, int argsSize, const IpEndpointName& remoteEndpoint, void* param );
+    void ProcessClock( const char *argsData, int argsSize, const IpEndpointName& remoteEndpoint );
+    static void ProcessClock( const char *argsData, int argsSize, const IpEndpointName& remoteEndpoint, void* param );
 };
 
 #endif /* DMXCONTROLLER_H */

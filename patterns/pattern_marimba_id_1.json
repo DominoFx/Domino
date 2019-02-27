@@ -1,0 +1,10 @@
+{
+    "name":"MARIMBA STATION - ID 2",
+    "id":32,  
+    "baselineValueDMX" : 30, 
+    "sequence":
+    [
+        { "fade":"00s 080", "sustain":"00s 160", "dmx":[ {"0":230} ] },
+        { "fade":"00s 500", "sustain":"00s 000", "dmx":[] }
+    ]
+}

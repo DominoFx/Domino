@@ -42,6 +42,10 @@ struct FVec3_t : public FVec3Data_t
     { this->x = that.x, this->y = that.y, this->z = that.z; return *this; }
     FVec3_t& operator=( const DVec3Data_t& that )
     { this->x = that.x, this->y = that.y, this->z = that.z; return *this; }
+    FVec3_t& operator+=( const FVec3Data_t& that )
+    { this->x += that.x, this->y += that.y, this->z += that.z; }
+    FVec3_t& operator*=( float f )
+    { this->x *= f, this->y *= f, this->z *= f; }
     float operator[]( int i ) const
     { return (i==0? x : (i==1? y : (i==2? z : 0))); }
     //float x, y, z; // inherited from FVec3Data_t

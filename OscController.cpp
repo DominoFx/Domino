@@ -7,42 +7,59 @@ OscController::OscController() : m_transmitSocket(nullptr)
 {
 }
 
-// Defaults: address = "127.0.0.1", portTransmit=8888, portReceive=7777
-bool OscController::Init(std::string address, int portTransmit)
+bool OscController::Open(std::string address, int port)
 {
-    m_address = address;
-    m_portTransmit = portTransmit;
+    //printf("OscController() %s:%i \n", address.c_str(), port);
+    IpEndpointName ipEndpointName = IpEndpointName( address.c_str(), port );
     
-    m_transmitSocket = nullptr;
-    int retries = 0, retriesMax = 30;
+    if( Opened() &&
+        (m_ipEndpointName.address==ipEndpointName.address) &&
+        (m_ipEndpointName.port=ipEndpointName.port) )
+        return true; // nothing to do
 
-    // Open transmit socket, with retries in case of failure,
-    // can happen in early moments after system startup
+    m_ipEndpointName = ipEndpointName;
+            
+    SAFE_DELETE(m_transmitSocket);
+    UdpSocket* temp = new UdpSocket();
+
+    int retries = 0, retriesMax = 8;
     while( (m_transmitSocket==nullptr) && (retries<retriesMax) )
     {
         try
         {
-            m_transmitSocket = new UdpTransmitSocket ( IpEndpointName( m_address.c_str(), m_portTransmit ) );
+            temp->Connect( m_ipEndpointName );
+            m_transmitSocket = temp;
         }
         catch(...)
         {
+            SAFE_DELETE(m_transmitSocket);
             retries++;
-            fprintf( stderr, "DominoFX: Error transmitting to %s : %i, retry %i ...\n", address.c_str(), portTransmit, retries );
+            fprintf( stderr, "DominoFX: Error transmitting to %s : %i, retry %i ...\n", address.c_str(), (int)port, (int)retries );
             unsigned int microseconds = 1000000; // 1 second
             usleep(microseconds);
         }
     }
+    if( retries==retriesMax )
+    {
+        SAFE_DELETE(temp);
+    }
+    if( Opened() )
+    {
+        printf( "DominoFX: Opened transmitter socket to %s : %i...\n", address.c_str(), (int)port );
+    }
+    bool retval = Opened();
 
-    return (m_transmitSocket != nullptr);
+    return (retval);
 }
 
-bool OscController::IsInitialized()
+bool OscController::Opened()
 {
-	return (m_transmitSocket!=nullptr);
+	return (m_transmitSocket!=nullptr);  // no ability to check IsConnected()
 }
 
 void OscController::Send(std::string& tag, int paramCount, float* paramBuf )
 {
+    //printf("OscController::Send() 1 -> %s \n", tag.c_str());
     if(m_transmitSocket != nullptr)
     {
         memset(&m_outputBuffer[0], 0, sizeof(m_outputBuffer));//Reuse buffer
@@ -62,11 +79,13 @@ void OscController::Send(std::string& tag, int paramCount, float* paramBuf )
 
          m_transmitSocket->Send( packetStream.Data(), packetStream.Size() );
     }
+    //printf("OscController::Send() 1 <- %s \n", tag.c_str());
 }
 
 void OscController::Send(std::string& tag, int paramCount, int* paramBuf )
 {
-    if(m_transmitSocket != NULL)
+    //printf("OscController::Send() 2 -> %s \n", tag.c_str());
+    if(m_transmitSocket != nullptr)
     {
         memset(&m_outputBuffer[0], 0, sizeof(m_outputBuffer));//Reuse buffer
 
@@ -85,11 +104,13 @@ void OscController::Send(std::string& tag, int paramCount, int* paramBuf )
 
         m_transmitSocket->Send( packetStream.Data(), packetStream.Size() );
     }
+    //printf("OscController::Send() 2 <- %s \n", tag.c_str());
 }
 
 void OscController::Send(std::string& tag, int param0, int paramCountRest, const char** paramBufRest )
 {
-    if(m_transmitSocket != NULL)
+    //printf("OscController::Send() 3 -> %s \n", tag.c_str());
+    if(m_transmitSocket != nullptr)
     {
         memset(&m_outputBuffer[0], 0, sizeof(m_outputBuffer));//Reuse buffer
 
@@ -109,11 +130,13 @@ void OscController::Send(std::string& tag, int param0, int paramCountRest, const
 
          m_transmitSocket->Send( packetStream.Data(), packetStream.Size() );
     }
+    //rintf("OscController::Send() 3 <- %s \n", tag.c_str());
 }
 
 void OscController::Send(std::string& tag, int param0, int param1, int paramCountRest, const char** paramBufRest )
 {
-    if(m_transmitSocket != NULL)
+    //printf("OscController::Send() 4 -< %s \n", tag.c_str());
+    if(m_transmitSocket != nullptr)
     {
         memset(&m_outputBuffer[0], 0, sizeof(m_outputBuffer));//Reuse buffer
 
@@ -135,11 +158,13 @@ void OscController::Send(std::string& tag, int param0, int param1, int paramCoun
 
          m_transmitSocket->Send( packetStream.Data(), packetStream.Size() );
     }
+    //printf("OscController::Send() 4 <- %s \n", tag.c_str());
 }
 
 void OscController::Send(std::string& tag, int param0, int paramCountRest, float* paramBufRest )
 {
-    if(m_transmitSocket != NULL)
+    //printf("OscController::Send() 5 -> %s \n", tag.c_str());
+    if(m_transmitSocket != nullptr)
     {
         memset(&m_outputBuffer[0], 0, sizeof(m_outputBuffer));//Reuse buffer
 
@@ -157,12 +182,88 @@ void OscController::Send(std::string& tag, int param0, int paramCountRest, float
           << osc::EndBundle;
 
          m_transmitSocket->Send( packetStream.Data(), packetStream.Size() );
-    }
+    }    
+    //printf("OscController::Send() 5 <- %s \n", tag.c_str());
 }
 
 OscController::~OscController() {
     SAFE_DELETE( m_transmitSocket );
 }
+
+
+
+//
+// Class OscBroadcaster
+// 
+
+OscBroadcaster::OscBroadcaster() : m_broadcastSocket(nullptr)
+{
+}
+
+OscBroadcaster::~OscBroadcaster() {
+    SAFE_DELETE( m_broadcastSocket );
+}
+
+bool OscBroadcaster::Open( int port )
+{
+    printf("OscBroadcaster() %i \n", port);
+    
+    m_broadcastSocket = nullptr;
+    int retries = 0, retriesMax = 30;
+    while( (m_broadcastSocket==nullptr) && (retries<retriesMax) )
+    {
+        try
+        {
+            m_broadcastSocket = new UdpBroadcastSocket( port );
+        }
+        catch(...)
+        {
+            retries++;
+            fprintf( stderr, "DominoFX: Error broadcasting on port %i, retry %i ...\n",
+                port, retries );
+            usleep(1000000); // 1 second, or 1 million microseconds
+        }
+    }
+
+    if( Opened() )
+    {
+        printf( "DominoFX: Opened broadcaster socket to %i...\n", (int)port );
+    }
+    bool retval = Opened();
+    
+    return (retval);
+}
+
+bool OscBroadcaster::Opened()
+{
+	return (m_broadcastSocket!=nullptr);  // no ability to check IsConnected()
+}
+
+void OscBroadcaster::Send( std::string& tag, int paramCount, int* paramBuf )
+{
+    //printf("OscBroadcaster::Send() 1 -> %s \n", tag.c_str());
+    
+    if(m_broadcastSocket != NULL)
+    {
+        memset(&m_outputBuffer[0], 0, sizeof(m_outputBuffer));//Reuse buffer
+
+        osc::OutboundPacketStream packetStream( m_outputBuffer, OSC_OUTPUT_BUFFER_SIZE );
+
+        packetStream
+            << osc::BeginMessage( tag.c_str() );
+        for( int i=0; i<paramCount; i++ )
+        {
+            packetStream << paramBuf[i];
+        }
+        packetStream
+            << osc::EndMessage
+          ;
+
+        m_broadcastSocket->Send( packetStream.Data(), packetStream.Size() );
+    }
+    //printf("OscBroadcaster::Send() 1 <- %s \n", tag.c_str());
+}
+
 
 
 //
@@ -207,52 +308,103 @@ int OscListener::Register( const char* tag, OscCallback callbackFunc, void* call
     printf( "DominoFX: Registered listener for tag %s on port %i ...\n", tagStable, m_port );
 }
 
-int OscListener::Run( int port )
+int OscListener::Unregister( OscCallback callbackFunc )
 {
+    ClientMap::iterator iter;
+    for( iter=m_clientMap.begin(); iter!=m_clientMap.end(); )
+    {
+        if( iter->second.func==callbackFunc )
+        {
+            ClientMap::iterator item = iter;
+            iter++; // increment must be performed before erasing item
+            m_clientMap.erase(item);
+        }
+        else iter++;
+    }
+}
+
+int OscListener::Open( int port )
+{
+    if( Opened() && (port==m_port) )
+        return true; // nothing to do
+        
+    //printf( "1: OscListener::Open() %i\n", port );
+        
     int result = 0;
 
     SAFE_DELETE( m_receiveMultiplexer );
     SAFE_DELETE( m_receiveSocket );
+    UdpSocket* temp = new UdpSocket();
     
-    printf( "DominoFX: Launching %s listener on port %i ...\n", m_debugName.data(), port );
+    printf( "DominoFX: Launching %s listener on port %i ...\n", m_debugName.data(), (int)port );
     
     // Listen for connections from any address on the given port
     m_port = port;
     IpEndpointName endpointName;
     endpointName.address = IpEndpointName::ANY_ADDRESS;
     endpointName.port = port;
-    
-    int retries = 0, retriesMax = 30;
+
+    int retries = 0, retriesMax = 8;
     while( (m_receiveSocket==nullptr) && (retries<retriesMax) )
     {
+        //printf( "2: OscListener::Open() %i\n", port );
         try
         {
-            m_receiveSocket = new UdpReceiveSocket ( endpointName );
+            temp->Bind( endpointName );
+            m_receiveSocket = temp;
+            //printf( "3c: OscListener::Open() %i\n", port );
+        }
+        catch(std::exception const& e)
+        {
+            fprintf( stderr, "DominoFX: Error [%s|%s] receiving from 0x%X : %i, retry %i...\n",
+                (const char*)(e.what()), (const char*)(typeid(e).name()),
+                endpointName.address, (int)(endpointName.port), (int)retries );
         }
         catch(...)
         {
+            fprintf( stderr, "DominoFX: Unknown error receiving from 0x%X : %i, retry %i...\n",
+                endpointName.address, (int)(endpointName.port), (int)retries );
+        }
+        if( m_receiveSocket==nullptr )
+        {
             retries++;
-            fprintf( stderr, "DominoFX: Error receiving from 0x%X : %i, retry %i ...\n", endpointName.address, endpointName.port, retries );
             unsigned int microseconds = 1000000; // 1 second
             usleep(microseconds);
         }
     }
-       
-    SAFE_DELETE( m_receiveMultiplexer );
-    m_receiveMultiplexer = new SocketReceiveMultiplexer();
-    m_receiveMultiplexer->AttachSocketListener( m_receiveSocket, this );
+    //printf( "4: OscListener::Open() %i\n", port );
+    if( retries==retriesMax )
+    {
+        SAFE_DELETE(temp);
+        printf( "DominoFX: Failed launching %s listener on port %i...\n", m_debugName.data(), (int)port );
+    }
+    else
+    {
+        //printf( "5: OscListener::Open() %i\n", port );
+        m_receiveMultiplexer = new SocketReceiveMultiplexer();
+        m_receiveMultiplexer->AttachSocketListener( m_receiveSocket, this );
 
-    // Create thread to receive UDP packets
-    m_receiveThread = std::thread(ReceiveThreadBootstrap,this);
+        // Create thread to receive UDP packets
+        if( m_receiveThread.get_id()==std::thread::id() )
+        {
+            m_receiveThread = std::thread(ReceiveThreadBootstrap,this);
+        }
 
-    printf( "DominoFX: Launched %s listener on port %i ...\n", m_debugName.data(), port );
+        printf( "DominoFX: Opened receiver socket on port %i...\n", (int)port );
+    }
+    //printf( "6: OscListener::Open() %i\n", port );
     
     return result;
 }
 
-bool OscListener::Running()
+bool OscListener::Opened()
 {
-    return (m_receiveSocket!=nullptr);
+    return (m_receiveSocket!=nullptr) && (m_receiveSocket->IsBound());
+}
+
+int OscListener::Port()
+{
+    return (m_port);
 }
 
 

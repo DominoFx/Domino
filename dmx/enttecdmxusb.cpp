@@ -86,8 +86,10 @@ bool EnttecDMXUSB::ResetCanauxDMX(int start/*=1*/, int end/*=NB_CANAUX_MAX*/)
 
 void EnttecDMXUSB::SendDMX()
 {    
+    //printf("EnttecDMXUSB::SendDMX() -> \n");
     sendPacket(PKT_DMXOUT, (char *)&dmxout[0], dmxout_length);
     device_mode = PKT_DMXOUT;
+    //printf("EnttecDMXUSB::SendDMX() <- \n");
 }
 
 bool EnttecDMXUSB::SendDatasDMX(byte *datas, int start/*=1*/, int length/*=NB_CANAUX_MAX*/)

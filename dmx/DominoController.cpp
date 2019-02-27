@@ -14,9 +14,6 @@
 #include <algorithm>
 #include <thread>
 
-// TODO: Convert to params value
-int muxFieldOrder[] = {2,3,4,6,7}; // mux fields 0, 1 and 5 unused on the mux circuitboard
-
 //
 // Helpers
 //
@@ -31,28 +28,6 @@ else                                                                           \
     printf( "DominoFX: No config entry for \"%s\" \n", #_name_ );              \
 }
 
-bool strcmp_s( const char* a, int aSizeMax, const char* b, int bSizeMax)
-{
-    int i = 0;
-    for( i=0; (i<aSizeMax) && (a[i]!='\0') && (i<bSizeMax) && (b[i]!='\0'); i++ )
-    {
-        if( a[i]!=b[i] )
-            break;
-    }
-    return ((a[i]=='\0') && (b[i]=='\0'));
-}
-
-int little_endian( int big )
-{
-    int little;
-    char* dest = (char*)(&little);
-    char* src  = (char*)(&big);
-    dest[3] = src[0];
-    dest[2] = src[1];
-    dest[1] = src[2];
-    dest[0] = src[3];
-    return little;
-}
 
 
 // 
@@ -61,7 +36,8 @@ int little_endian( int big )
 //
 
 DominoController::DominoController():
-  m_sensorMaster(nullptr)
+  m_initialized(false)
+, m_sensorMaster(nullptr)
 , m_playerMaster(nullptr)
 , m_sensorWorker(nullptr)
 , m_playerWorker(nullptr)
@@ -69,9 +45,14 @@ DominoController::DominoController():
 , m_workerToMasterListener("Worker to Master")
 , m_soundToMasterListener("Sound to Master")
 , m_soundToWorkerListener("Sound to Worker")
+, m_diagToWorkerListener("Params Control")
+, m_workerCount(0)
+, m_updateCount(0)
 , m_continuousDelay(1.0f / 30.0f) //Default to 30fps
-, m_debugOutput(false)
+, m_sleep(0)
 , m_debugCmd(0)
+, m_debugFlags(0)
+, m_watchdogServer(nullptr)
 {
 }
 
@@ -82,43 +63,67 @@ DominoController::~DominoController()
     SAFE_DELETE( m_playerMaster );
     SAFE_DELETE( m_sensorWorker );
     SAFE_DELETE( m_playerWorker );
-    m_diagData.resize(0);
     
     signal_shutdown = 1;
 }
 
 bool DominoController::Init( int argc, char** argv )
 {
-    Json::Value& jsonRoot = m_params.jsonRoot;
-    std::ifstream configfile( CONFIG_SETUP_FILENAME );
-    configfile >> jsonRoot;
+    //
+    // Read parameters from disk
+    //
+
+    bool success = true;
     
+    printf( "DominoFX: Reading config file %s... \n", CONFIG_SETUP_FILENAME );
+    std::ifstream configFile( CONFIG_SETUP_FILENAME );
+
+    Json::Value jsonRoot;
+    configFile >> jsonRoot;
+
     if(jsonRoot.empty())
     {
         printf( "DominoFX: Unable to read config file \n" );
-        return false;
+        success = false;
     }
-    printf( "DominoFX: Reading config file... \n" );
 
     //
-    // Master & Worker mode
+    // Process parameters
     //
 
-    if( argc>1 )
+    if( success )
+    {
+        success = Load( jsonRoot );
+    }
+
+    //
+    // Master & Worker command-line switch
+    //
+
+    if( (argc>1) && success )
     {
         m_params.masterMode = false,  m_params.workerMode = false;
         for( int i=1; i<argc; i++ )
         {
             // TODO: Add more robust handling for command-line parameters
             if( (strcmp(argv[i],"-m")==0) || (strcmp(argv[i],"-M")==0) ) // Master mode only
+            {
+                printf( "DominoFX: Command-line param found, master mode...\n" );
                 m_params.masterMode = true;
+            }
             if( (strcmp(argv[i],"-w")==0) || (strcmp(argv[i],"-W")==0) ) // Worker mode only
+            {
+                printf( "DominoFX: Command-line param found, worker mode...\n" );
                 m_params.workerMode = true;
+            }
             if( (strcmp(argv[i],"-h")==0) || (strcmp(argv[i],"-h")==0) ) // Both
+            {
+                printf( "DominoFX: Command-line param found, master and worker hybrid mode...\n" );
                 m_params.masterMode = true,  m_params.workerMode = true;
+            }
         }
     }
-    else
+    else if( success )
     {
         if(jsonRoot.isMember("masterMode"))
         {
@@ -130,145 +135,52 @@ bool DominoController::Init( int argc, char** argv )
             m_params.masterMode = false;
             m_params.workerMode = true;  // default to worker mode
         }
-    }
-    
-    //
-    // Basics
-    //
-    
-    GET_JSON( jsonRoot, m_params, dominoCount, Int );
-                                  
-    GET_JSON( jsonRoot, m_params, continuousFPS, Float );
-    this->m_continuousDelay = 1.0f / m_params.continuousFPS;
-
-    GET_JSON( jsonRoot, m_params, dmxFPS, Float );
-    
-    //
-    // Device bus names
-    //
-    
-    // I2C device name depends on Raspberry Pi model
-    // to deterime the correct device, run the following at the command line:
-    //   sudo i2cdetect -y 0
-    //   sudo i2cdetect -y 1
-    // if the first one works, use "/dev/i2c-0"
-    // if the second one works, use "/dev/i2c-1"
-
-    GET_JSON( jsonRoot, m_params, i2cDevice, String );
-
-    GET_JSON( jsonRoot, m_params, dmxDevice, String );
-
-    //
-    // Networking params
-    //
-    
-    GET_JSON( jsonRoot, m_params, masterToWorkerPort, Int );
-    GET_JSON( jsonRoot, m_params, workerToMasterPort, Int );
-    GET_JSON( jsonRoot, m_params, workerToMasterAddress, String );
-    { // masterToWorkerAddress list
-        int count = jsonRoot["masterToWorkerAddress"].size();
-        for( int i=0; i<count; i++ )
-        {
-            Json::Value& jsonItem = jsonRoot["masterToWorkerAddress"][i];
-            m_params.masterToWorkerAddress.push_back( jsonItem.asString() );
-        }
-    }
-    
-    GET_JSON( jsonRoot, m_params, workerToSoundPort, Int );
-    GET_JSON( jsonRoot, m_params, workerToSoundAddress, String );
-    GET_JSON( jsonRoot, m_params, soundToWorkerPort, Int );
-
-    GET_JSON( jsonRoot, m_params, masterToSoundPort, Int );
-    GET_JSON( jsonRoot, m_params, masterToSoundAddress, String );
-    GET_JSON( jsonRoot, m_params, soundToMasterPort, Int );
-
-    GET_JSON( jsonRoot, m_params, workerToDiagPort, Int );
-    GET_JSON( jsonRoot, m_params, workerToDiagAddress, String );
-
-    //
-    // Sensor params
-    //
-    
-    GET_JSON( jsonRoot, m_params, sensorAxis, Int );
-    GET_JSON( jsonRoot, m_params, sensorSmoothing, Int );
-    GET_JSON( jsonRoot, m_params, sensorActivityBlend, Float );
-    GET_JSON( jsonRoot, m_params, sensorActivityThresh, Float );
-    GET_JSON( jsonRoot, m_params, sensorVelocityMultiplier, Float );
-    GET_JSON( jsonRoot, m_params, sensorTapThresh, Int );
-    GET_JSON( jsonRoot, m_params, sensorTapTimeLimit, Int );
-    GET_JSON( jsonRoot, m_params, sensorTapTimeLatency, Int );
-    GET_JSON( jsonRoot, m_params, sensorTapTimeWindow, Int );
-    
-    GET_JSON( jsonRoot, m_params, multiplexerAddress1, Int );
-    GET_JSON( jsonRoot, m_params, multiplexerAddress2, Int );
-    GET_JSON( jsonRoot, m_params, multiplexerLanes, Int );
-
-    //
-    // DMX params  
-    //
-
-    GET_JSON( jsonRoot, m_params, dmxEnable, Bool );
-    GET_JSON( jsonRoot, m_params, dmxInterface, String );
-    
-    m_params.dmxInterfaceID = DMX_USB_PRO; // default
-    if(m_params.dmxInterface == "open")
-    {
-        m_params.dmxInterfaceID = OPEN_DMX_USB;
     }    
 
     //
-    // OSC params
-    //
-    
-    GET_JSON( jsonRoot, m_params, interactTag, String );
-    GET_JSON( jsonRoot, m_params, heartbeatTag, String );
-    GET_JSON( jsonRoot, m_params, configTag, String );
-    GET_JSON( jsonRoot, m_params, confirmTag, String );
-    GET_JSON( jsonRoot, m_params, idleTag, String );
-    GET_JSON( jsonRoot, m_params, diagTag, String );
-
-    //
-    // External program params
+    // Master & Worker initialization
     //
 
-    GET_JSON( jsonRoot, m_params, commandLineSound, String );
-    
-    //
-    // Diagnostic params
-    //
-    
-    GET_JSON( jsonRoot, m_params, debugOutput, Bool );
-    
-    if(jsonRoot.isMember("debugOscConfig"))
+    if( success )
     {
-        int count = jsonRoot["debugOscConfig"].size();
-        Json::Value& jsonItem0 = jsonRoot["debugOscConfig"][0];
-        m_params.debugOscConfig0 = ((count<=0)?  0 : jsonItem0.asInt());
-        Json::Value& jsonItem1 = jsonRoot["debugOscConfig"][1];
-        m_params.debugOscConfig1 = ((count<=1)?  0 : jsonItem1.asInt());
-        for( int i=2; i<count; i++ )
+        m_workerCount = m_params.dominoModuleCount;
+        
+        if( m_params.masterMode && m_params.workerMode )
         {
-            Json::Value& jsonItemIP = jsonRoot["debugOscConfig"][i];
-            m_params.debugOscConfigIP.push_back( jsonItemIP.asString() );
+            printf( "DominoFX: Configured as MASTER and WORKER hybrid \n" );
         }
-    }
+        if( m_params.masterMode && success )
+        {
+            printf( "DominoFX: Launching MASTER \n" );
+            m_sensorMaster = new DominoSensorMaster( *this );
+            m_playerMaster = new DominoPlayerMaster( *this );
+            success = success && (m_sensorMaster->Init());
+            success = success && (m_playerMaster->Init());
+        }
+        
+        if( m_params.workerMode && success )
+        {
+            printf( "DominoFX: Launching WORKER \n" );
+            m_sensorWorker = new DominoSensorWorker( *this );
+            m_playerWorker = new DominoPlayerWorker( *this );
+            success = success && (m_sensorWorker->Init());
+            success = success && (m_playerWorker->Init());
+        }
 
-    if( (m_params.workerToDiagAddress.length()!=0) && (m_params.workerToDiagPort!=0) )
-    {
-        printf( "DominoFX: Connecting to diagnostics at %s : %i \n",
-            m_params.workerToDiagAddress.data(), m_params.workerToDiagPort );
-        m_diagServer.Init( m_params.workerToDiagAddress, m_params.workerToDiagPort );
-    }
-
-    
-    //
-    // Initialize external programs
-    //
-    
-    printf( "DominoFX: Launching external programs... \n" );
-    if( m_params.commandLineSound.length()!=0 )
-    {
-        std::system( m_params.commandLineSound.data() );
+        if( !success )
+        {
+            SAFE_DELETE( m_sensorMaster );
+            SAFE_DELETE( m_playerMaster );
+            SAFE_DELETE( m_sensorWorker );
+            SAFE_DELETE( m_playerWorker );
+        }
+        else
+        {
+            m_watchdogServer = new OscController();
+            m_watchdogServer->Open( m_params.workerToWatchdogAddress, m_params.workerToWatchdogPort );
+            StartInputThread();
+        }
+        m_initialized = success;
     }
      
     //
@@ -277,53 +189,56 @@ bool DominoController::Init( int argc, char** argv )
     
     m_lastUpdate = std::chrono::system_clock::now();
     m_lastConfig = std::chrono::system_clock::now();
-    
-   
-    bool success = true;
-    if( m_params.masterMode && m_params.workerMode )
-    {
-        printf( "DominoFX: Configured as MASTER and WORKER hybrid \n" );
-    }
-    if( m_params.masterMode && success )
-    {
-        printf( "DominoFX: Launching MASTER \n" );
-        m_sensorMaster = new DominoSensorMaster( *this );
-        m_playerMaster = new DominoPlayerMaster( *this );
-        success = success && (m_sensorMaster->Init());
-        success = success && (m_playerMaster->Init());
-    }
-    
-    if( m_params.workerMode && success )
-    {
-        printf( "DominoFX: Launching WORKER \n" );
-        m_sensorWorker = new DominoSensorWorker( *this );
-        m_playerWorker = new DominoPlayerWorker( *this );
-        success = success && (m_sensorWorker->Init());
-        success = success && (m_playerWorker->Init());
-    }
-
-    if( !success )
-    {
-        SAFE_DELETE( m_sensorMaster );
-        SAFE_DELETE( m_playerMaster );
-        SAFE_DELETE( m_sensorWorker );
-        SAFE_DELETE( m_playerWorker );
-    }
-    else
-    {
-        StartInputThread();
-    }
-
+     
     printf( "DominoFX: Initialization %s \n", (success?"done":"failed") );
     
     // Initialized
-    return success;
+    return success;    
+}
+
+int DominoController::Load( Json::Value& jsonRoot )
+{
+    printf( "\nDominoFX: Loading all parameters... \n" );
+    
+    m_params.Init( jsonRoot );
+        
+    //
+    // Basics
+    //
+    
+    this->m_continuousDelay = 1.0f / m_params.continuousFPS;
+
+    //
+    // Params listener
+    //
+
+    // TODO: Maybe have separate ports for master and worker params listener,
+    // or guarantee hybrid is used instead of running both as separate processes,
+    // or better yet, prevent the port conflict from causing program to freeze
+    if( m_params.workerMode )
+    {
+// TODO: Restore this, why is crashing on startup?
+//        if( !m_diagToWorkerListener.Opened() || (m_diagToWorkerListener.Port()!=m_params.diagToWorkerPort) )
+//            m_diagToWorkerListener.Open( m_params.diagToWorkerPort );
+//        m_diagToWorkerListener.Register( m_params.paramTag.c_str(), ProcessParamChange, this );
+    }
+    else 
+        printf( "\nDominoFX: NOTE, Params Control listener disabled in master mode... \n" );
+    
+    //
+    // Master & Worker reload
+    //
+    
+    if( m_sensorMaster!=nullptr ) m_sensorMaster->Reload();
+    if( m_sensorWorker!=nullptr ) m_sensorWorker->Reload();
+    if( m_playerMaster!=nullptr ) m_playerMaster->Reload();
+    if( m_playerWorker!=nullptr ) m_playerWorker->Reload();
+       
+    return 1;
 }
 
 void DominoController::Update()
 {
-    //printf("DominoController::Update() -> \n");
-    
     TimePoint now = std::chrono::system_clock::now();
     Duration elapsedUpdate = now - m_lastUpdate;
     Duration elapsedConfig = now - m_lastConfig;
@@ -331,23 +246,16 @@ void DominoController::Update()
     bool sendUpdate = (elapsedUpdate.count() >= m_continuousDelay);
     if( sendUpdate )
     {
-        bool sendConfig = (elapsedConfig.count() >= 1.0f);
+        // Send configuration messages occasionally
+        bool sendConfig = (elapsedConfig.count() >= 2.0f); // two seconds
         if( sendConfig )
         {
             m_lastConfig = now;
         }
-        
-        // Begin debug update if user requested
-        if( m_debugCmd>0 )
-        {
-            // user input debugging command            
-            m_debugOutput = true;
-            m_debugCmd--;
-        }
-
 
         // MASTER AGENT UPDATE
-        if( m_sensorMaster!=nullptr )
+        bool isMaster = (m_sensorMaster!=nullptr);
+        if( isMaster )
         {
             if( sendConfig )
                 m_sensorMaster->SendConfig();
@@ -357,52 +265,47 @@ void DominoController::Update()
         }
         
         // WORKER AGENT UPDATE
-        if( m_sensorWorker!=nullptr )
+        bool isWorker = (m_sensorWorker!=nullptr);
+        if( isWorker )
         {
             DmxFrame dmxout;
-            ZERO_ARRAY( dmxout, m_params.dominoCount, 0 );
+            ZERO_ARRAY( dmxout, GetDominoLocalCount(), 0 );
             
             if( sendConfig )
                 m_sensorWorker->SendConfig();
                 
             m_sensorWorker->Update( dmxout);
             m_playerWorker->Update( dmxout );
-            
-            // Send diagnostic signal
-            int elementCount = 6;
-            int diagDataCount = elementCount * m_params.dominoCount;
-            m_diagData.resize( diagDataCount );
-            for (int sensorIndex = 0; sensorIndex<m_params.dominoCount; sensorIndex++)
-            {
-                DominoState* state = m_sensorWorker->GetState(sensorIndex);
-                ISensor* sensor = m_sensorWorker->GetSensor(sensorIndex);
-                int a = sensorIndex*elementCount;
-                m_diagData[a+0] = (state==nullptr?  0 : state->Angle());
-                m_diagData[a+1] = (sensor==nullptr? 0 : sensor->GetData()->acceleration.x);
-                m_diagData[a+2] = (sensor==nullptr? 0 : sensor->GetData()->acceleration.y);
-                m_diagData[a+3] = (state==nullptr?  0 : (state->Tap()? 100.0f : (state->Active()? 1.0f : 0.0f)));
-                m_diagData[a+4] = (float)(dmxout[sensorIndex]/255.0f);
-                m_diagData[a+5] = (state==nullptr?  0 : (float)(state->Err()));
+        }
+        
+        // WATCHDOG UPDATE
+        bool isRemoteWorker = (isWorker && m_sensorWorker->IsRemote());
+        if( sendConfig && (isMaster || isRemoteWorker) )
+        {
+            if( m_params.sleepEnable!=0 )
+            {       
+                m_sleep = (isMaster? m_sensorMaster->GetSleep() : m_sensorWorker->GetSleep());
+                const char* params[] = {m_sleep? "sleep":"awake"};
+                m_watchdogServer->Send( m_params.configTag, m_sleep, 1, params );
             }
-            m_diagServer.Send( m_params.diagTag, diagDataCount, m_diagData.data() );
         }
 
         // Print current FPS
-        if( m_debugOutput )
+        if( GetDebugVerbose() )
         {
             printf( "---------- ----------\n" );
             printf("FPS core: %f\n", (float)(1.0f/elapsedUpdate.count()) );
         }
 
-        // End debug update
-        m_debugOutput = false; // disable debugging until next update
+        // End debug verbose status output
+        SET_FLAG( m_debugFlags, debug_verbose, false ); // disable until next request
         
+        m_updateCount += 1;
         m_lastUpdate = now;
     }
     else
     {
     }
-    //printf("DominoController::Update() <- \n");    
 }
 
 DominoParams& DominoController::GetParams()
@@ -412,16 +315,66 @@ DominoParams& DominoController::GetParams()
 
 int DominoController::GetDominoTotalCount()
 {
-    if( m_sensorMaster!=nullptr )
-        return m_sensorMaster->GetDominoTotalCount();
-    return m_params.dominoCount; // default handling
+    return m_params.dominoTotalCount;
 }
+
+int DominoController::GetDominoLocalCount()
+{
+    return (m_params.dominoTotalCount / m_params.dominoModuleCount);
+}
+
+int DominoController::GetUpdateCount()
+{
+    return m_updateCount;
+}
+
+int DominoController::GetWorkerCount()
+{
+    return m_workerCount;
+}
+
+OscController* DominoController::GetWorkerSock( int index )
+{
+    return (m_sensorMaster==nullptr? nullptr : m_sensorMaster->GetWorkerSock(index) );
+}
+
+int DominoController::GetSleep()
+{
+    return m_sleep;
+}
+
+int DominoController::GetDebugFlags()
+{
+    return m_debugFlags;
+}
+
+void DominoController::SetDebugFlags( int flags )
+{
+    m_debugFlags = flags;
+}
+
+bool DominoController::GetDebugVerbose()
+{
+    return ((m_debugFlags & debug_verbose)>0);
+}
+
+bool DominoController::GetDebugDiagServer()
+{
+    return ((m_debugFlags & debug_diag_server)>0);
+}
+
+bool DominoController::GetDebugDiagStream()
+{
+    return ((m_debugFlags & debug_diag_stream)>0);
+}
+
 
 int DominoController::RegisterMasterToWorkerCallback( const char* tag, OscCallback func, void* param )
 {
     int result = 0;
-    if( !m_masterToWorkerListener.Running() )
-        m_masterToWorkerListener.Run( m_params.masterToWorkerPort );
+    if( !m_masterToWorkerListener.Opened() || (m_masterToWorkerListener.Port()!=m_params.masterToWorkerPort) )
+        m_masterToWorkerListener.Open( m_params.masterToWorkerPort );
+    m_masterToWorkerListener.Unregister( func );
     m_masterToWorkerListener.Register( tag, func, param );
     return result;
 }
@@ -429,8 +382,9 @@ int DominoController::RegisterMasterToWorkerCallback( const char* tag, OscCallba
 int DominoController::RegisterWorkerToMasterCallback( const char* tag, OscCallback func, void* param )
 {
     int result = 0;
-    if( !m_workerToMasterListener.Running() )
-        m_workerToMasterListener.Run( m_params.workerToMasterPort );
+    if( !m_workerToMasterListener.Opened() || (m_workerToMasterListener.Port()!=m_params.workerToMasterPort) )
+        m_workerToMasterListener.Open( m_params.workerToMasterPort );
+    m_workerToMasterListener.Unregister( func );
     m_workerToMasterListener.Register( tag, func, param );
     return result;
 }
@@ -438,8 +392,9 @@ int DominoController::RegisterWorkerToMasterCallback( const char* tag, OscCallba
 int DominoController::RegisterSoundToMasterCallback( const char* tag, OscCallback func, void* param )
 {
     int result = 0;
-    if( !m_soundToMasterListener.Running() )
-        m_soundToMasterListener.Run( m_params.soundToMasterPort );
+    if( !m_soundToMasterListener.Opened() || (m_soundToMasterListener.Port()!=m_params.soundToMasterPort) )
+        m_soundToMasterListener.Open( m_params.soundToMasterPort );
+    m_soundToMasterListener.Unregister( func );
     m_soundToMasterListener.Register( tag, func, param );
     return result;
 }
@@ -447,10 +402,46 @@ int DominoController::RegisterSoundToMasterCallback( const char* tag, OscCallbac
 int DominoController::RegisterSoundToWorkerCallback( const char* tag, OscCallback func, void* param )
 {
     int result = 0;
-    if( !m_soundToWorkerListener.Running() )
-        m_soundToWorkerListener.Run( m_params.soundToWorkerPort );
+    if( !m_soundToWorkerListener.Opened() || (m_soundToWorkerListener.Port()!=m_params.soundToWorkerPort) )
+        m_soundToWorkerListener.Open( m_params.soundToWorkerPort );
+    m_soundToWorkerListener.Unregister( func );
     m_soundToWorkerListener.Register( tag, func, param );
     return result;
+}
+
+void DominoController::ProcessParamChange( const char *argsData, int argsSize, const IpEndpointName& remoteEndpoint )
+{
+    Json::Value jsonRoot;
+    
+    Json::Reader reader;
+    bool parseResult = reader.parse( argsData, jsonRoot );
+
+    if( (!parseResult) || jsonRoot.isNull() )
+        printf( "DominoFX: Error receiving params \"%s\" \n", argsData );
+    else 
+    {
+        printf( "DominoFX: Received params [" );
+        if( jsonRoot.isArray() )
+            printf( "MALFORMATTED AS ARRAY" );
+        if( !jsonRoot.isObject() )
+            printf( "MALFORMATTED AS SINGLE \"%s\"", jsonRoot.asString().c_str() );
+        else
+        {
+            std::vector<std::string> memberNames = jsonRoot.getMemberNames();
+            if( memberNames.size()>0 )
+                printf( "%s", memberNames[0].c_str() );
+            for( int i=1; i<memberNames.size(); i++ )
+                printf( ", %s", memberNames[i].c_str() );
+        }
+        printf("]\n");
+        Load( jsonRoot );
+    }
+}
+
+void DominoController::ProcessParamChange( const char *argsData, int argsSize, const IpEndpointName& remoteEndpoint, void* param )
+{
+    DominoController* parent = (DominoController*)param;
+    parent->ProcessParamChange(argsData,argsSize,remoteEndpoint);
 }
 
 // 
@@ -461,21 +452,30 @@ int DominoController::StartInputThread()
 {
     int result = 0;
     
-    printf( "DominoFX: Launching Input thread...\n" );
-    m_inputThread = std::thread(InputThread,this);
+    // launch thread if not yet created
+    if( m_inputThread.get_id() == std::thread::id() )
+    {
+        printf( "DominoFX: Launching Input thread...\n" );
+        m_inputThread = std::thread(InputThreadBootstrap,this);
+    }
     
     return result;
 }
 
-void DominoController::InputThread( DominoController* parent )
+void DominoController::InputThread()
 {
-    printf( "DominoFX: Input thread started\n" );
+    printf( "DominoFX: Started Input thread...\n" );
     while( (!feof(stdin)) && (!signal_shutdown) )
     {
         int c = getc(stdin);
-        parent->m_debugCmd++;
+        printf( "DominoController::InputThread() received %i \n", (int)c );
+        if( c=='\t' )
+            TOGGLE_FLAG( m_debugFlags, debug_diag_stream );
+        else
+            SET_FLAG( m_debugFlags, debug_verbose, true );
+        printf( "Debug verbose: %s, %i \n", (GetDebugVerbose()? "true" : "false"), (int)m_debugFlags );
     }
-    printf( "DominoFX: Input thread stopped\n" );
+    printf( "DominoFX: Stopped Input thread\n" );
 }
 
 
@@ -505,91 +505,287 @@ bool DominoSensorAgent::Init()
 DominoSensorMaster::DominoSensorMaster( DominoController& context ):
   DominoSensorAgent(context)
 , m_initialized(false)  
-, m_soundConfigured(false)
-, configWorkerCount(-1)
-, configWorkerAddress(nullptr)
+, m_workerAddress(nullptr)
+, m_workerCount(0)
+, m_workersConfigured(0)
+, m_activity(0.0f)
+, m_sleep(-1)
+, m_heartbeatRampout(0)
+, m_heartbeatCount(0)
+, m_clock{0,0,0,0}
+, m_soundServer(nullptr)
+, m_soundConfigured(0)
 {
 }
 DominoSensorMaster::~DominoSensorMaster()
 {
-    for( int i=0; i<configWorkerCount; i++ )
-        SAFE_DELETE_ARRAY( configWorkerAddress[i] );
-    SAFE_DELETE_ARRAY( configWorkerAddress );
+    for( int i=0; i<m_workerCount; i++ )
+    {
+        SAFE_DELETE_ARRAY( m_workerAddress[i] );
+    }
+    
+    for( int i=0; i<m_workerSock.size(); i++ )
+    {
+        SAFE_DELETE( m_workerSock[i] );
+    }
+    m_workerSock.clear();
 }
 
 bool DominoSensorMaster::Init()
 {
     DominoSensorAgent::Init(); // base class method
     
-    if( (m_params.masterToSoundAddress.length()!=0) && (m_params.masterToSoundPort!=0) )
-    {
-        printf( "DominoFX: Connecting to sound server at %s : %i ...\n",
-            m_params.masterToSoundAddress.data(), m_params.masterToSoundPort );
-        m_soundServer.Init( m_params.masterToSoundAddress, m_params.masterToSoundPort );
-    }
+    Reload();
     
     // Transmit config data to OSC
-    if( m_soundServer.IsInitialized() )
-    {
-        m_context.RegisterSoundToMasterCallback( m_params.confirmTag.data(), ProcessConfirmSound, this );
-    }
-    
+    m_context.RegisterSoundToMasterCallback( m_params.confirmTag.data(), ProcessConfirmSound, this );
     m_context.RegisterWorkerToMasterCallback( m_params.heartbeatTag.data(), ProcessHeartbeat, this );
+    m_context.RegisterWorkerToMasterCallback( m_params.configTag.data(), ProcessConfigDomino, this );
 
     m_initialized = true;
     return m_initialized;
 }
 
-void DominoSensorMaster::Update()
+void DominoSensorMaster::Reload()
 {
+    if( (m_params.masterToSoundAddress.length()!=0) && (m_params.masterToSoundPort!=0) )
+    {
+        if( (m_soundServer==nullptr) || !m_soundServer->Opened() )
+        {
+            printf( "DominoFX: Connecting to sound server at %s : %i ...\n",
+                m_params.masterToSoundAddress.data(), m_params.masterToSoundPort );
+        }
+        SAFE_DELETE(m_soundServer);
+        m_soundServer = new OscController();
+        m_soundServer->Open( m_params.masterToSoundAddress, m_params.masterToSoundPort );
+    }
+    
+    {
+        // Reallocate workers array
+        for( int i=0; i<m_workerCount; i++ )
+        {
+            SAFE_DELETE_ARRAY( m_workerAddress[i] );
+        }
+        SAFE_DELETE_ARRAY( m_workerAddress );
+        
+        m_workerCount = m_context.GetWorkerCount();
+        if( m_workerCount>0 )
+        {
+            m_workerAddress = new char*[m_workerCount];
+        }
+        ZERO_ARRAY( m_workerAddress, m_workerCount, nullptr );
+
+        // Register workers
+        //if( (i<m_workerAddress.size()) && (m_workerAddress[i]!=nullptr) )
+        //    RegisterWorker( m_workerAddress[i], m_params.masterToWorkerPort, i );
+    }    
 }
 
-int DominoSensorMaster::GetDominoTotalCount()
+void DominoSensorMaster::Update()
 {
-    if( configWorkerCount<0 )
-        return -1; // ERROR: Requesting total workers but not yet initialized with workers!
-    return (configWorkerCount * m_params.dominoCount);
+    for( int i=0; i<m_workerCount; i++ )
+    {
+        if( (m_workerSock.size()>i) && (m_workerSock[i]!=nullptr) ) // should always be true
+        {
+            float param = m_activity;
+            m_workerSock[i]->Send( m_params.heartbeatTag, 1, (float*)(&param) );
+        }
+    }
+
+    if( (m_heartbeatRampout<=0) )
+    {
+        m_activity -= 0.0003;
+        m_activity = CLAMP( m_activity, 0,1 );
+    }
+    else
+    {
+        m_heartbeatRampout--;
+    }       
+}
+
+OscController* DominoSensorMaster::GetWorkerSock( int index )
+{
+    if( (index<0) || (index>=m_workerSock.size()) )
+        return nullptr;
+    return m_workerSock[index];
+}
+
+bool DominoSensorMaster::RegisterWorker( const char* workerAddress, int workerPort, int workerIndex )
+{
+    //printf( "Master::RegisterWorker() %i at %s:%.4i ...\n", workerIndex, workerAddress, workerPort );
+
+    if( workerIndex<0 )
+        return false; // should not happen
+            
+    if( (workerAddress==nullptr) || (workerIndex>=m_workerCount) )
+        return false; // can't register
+        
+    char* address = m_workerAddress[workerIndex];
+    OscController* sock = (m_workerSock.size()<=workerIndex?  nullptr : m_workerSock[workerIndex]);
+    if( (address!=nullptr) && (strcmp(address,workerAddress)==0) && (sock!=nullptr) && (sock->Opened()) )
+        return true; // already registered
+        
+    // Print messages first time transmit socket is opened, or has closed for some reason
+    bool readout = ( (sock==nullptr) || !(sock->Opened()) );
+    if( readout )
+        printf( "DominoFX: Registering worker %i at %s:%.4i ...\n", workerIndex, workerAddress, workerPort );
+
+    if( address==nullptr )
+    {
+        m_workerAddress[workerIndex] = new char[IpEndpointName::ADDRESS_STRING_LENGTH];
+        address = m_workerAddress[workerIndex];
+    }
+    
+    if( sock==nullptr )
+    {        
+        while( m_workerSock.size()<=m_workerCount )
+            m_workerSock.push_back(nullptr);            
+        m_workerSock[workerIndex] = new OscController();
+        sock = m_workerSock[workerIndex];
+    }
+    
+    if( sock!=nullptr )
+    {
+        // Open the socket
+        int port = m_params.masterToWorkerPort;        
+        strcpy( address, workerAddress );
+        m_workerSock[workerIndex]->Open( address, port );
+        if( readout )
+            printf( "DominoFX: Registered worker %i at %s:%.4i  ...\n", workerIndex, address, port );
+    }
+    else
+    {
+        if( readout )
+            printf( "DominoFX: Failure registering worker %i at %s:%.4i ...\n", workerIndex, workerAddress, workerPort );
+    }
+
+    // Check whether all workers are now configured
+    int i=0;
+    for( ; (i<m_workerCount) && (m_workerSock[i]!=nullptr); i++) ; // empty statement
+    m_workersConfigured = ((i>0) && (i==m_workerCount)? 1:0); // if loop broke early, or zero workers
 }
 
 int DominoSensorMaster::SendConfig()
 {
-    // Send config to sound master via OSC, until it has acknoledged with a confirm
-    if( (!m_soundConfigured) && m_soundServer.IsInitialized() )
+    // Update clock and sleep even if no workers registered yet
+    UpdateClock();
+    UpdateSleep();
+
+    // Send config to sound master
+    // Send redundantly, to support reconnect if either program is restarted
+    if( (m_workersConfigured>0) && (m_soundServer!=nullptr) )
     {
-        printf( "DominoFX: Sending configuration init to sound master ...\n" );
+        if( (!m_soundConfigured) && m_soundServer->Opened() )
+            printf( "DominoFX: Sending configuration init to sound master ...\n" );
         
-        // TODO: Implement startup handshake, don't use this temp solution
-            
-        // Populate array with IP addresses
-        if( configWorkerCount<0 )
+        static std::string configTag("/configMaster");
+        int param0 = m_params.soundIntrument;
+        int param1 = -1; // hard coded because mother is always workerIndex -1
+        
+        if( m_params.dominoModuleCount>1 )
         {
-            configWorkerCount = m_params.debugOscConfigIP.size();
-            configWorkerAddress = new char*[configWorkerCount];
-            for( int i=0; i<configWorkerCount; i++ )
+            // Multiple modules; workers are running on other machines, send their addresses
+            int paramIPCount = m_workerCount;
+            const char** paramIP = (const char**)(m_workerAddress);        
+            m_soundServer->Send( configTag, param0, param1, paramIPCount, paramIP );
+        }
+        else
+        {
+            // One module in hybrid mode; worker is running locally, send localhost
+            const char* paramIP = "127.0.0.1";
+            m_soundServer->Send( configTag, param0, param1, 1, &paramIP );
+        }
+    }
+
+    // Send time and sleep values to domino workers
+    if( m_workersConfigured>0 )
+    {
+        int params[] = {m_sleep, m_clock.weekday, m_clock.hour, m_clock.minute, m_clock.second};
+        for( int i=0; i<m_workerCount; i++ )
+        {
+            if( (m_workerSock.size()>i) && (m_workerSock[i]!=nullptr) ) // should always be true
             {
-                int length = m_params.debugOscConfigIP[i].length();
-                configWorkerAddress[i] = new char[1+length];
-                if( length>0 )
-                    memcpy( configWorkerAddress[i], m_params.debugOscConfigIP[i].data(), length*sizeof(char) );
-                configWorkerAddress[i][length] = '\0';
+                m_workerSock[i]->Send( m_params.clockTag, 5, params );
             }
         }
-    
-        static std::string configTag("/configMaster");
-        int param0 = m_params.debugOscConfig0;
-        int param1 = -1; // hard coded because mother is always workerIndex -1
-        int paramIPCount = configWorkerCount;
-        const char** paramIP = (const char**)configWorkerAddress;
-        
-        m_soundServer.Send( configTag, param0, param1, paramIPCount, paramIP );
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
+}
+
+int DominoSensorMaster::GetSleep()
+{
+    return m_sleep;
+}
+
+void DominoSensorMaster::UpdateClock()
+{
+    time_t generalTime = std::chrono::system_clock::to_time_t( std::chrono::system_clock::now() );
+    const tm localTime = *localtime( &generalTime );
+    m_clock.weekday = localTime.tm_wday;
+    m_clock.hour    = localTime.tm_hour;
+    m_clock.minute  = localTime.tm_min;
+    m_clock.second  = localTime.tm_sec;
+    const char* weekday[] = {"Sun","Mon","Tue","Wed","Thu","Fri","Sat"};
+    //printf( "UpdateCLock() m_clock = %s %i:%i:%i ...\n",
+    //    weekday[m_clock.weekday], m_clock.hour, m_clock.minute, m_clock.second );
+}
+
+void DominoSensorMaster::UpdateSleep()
+{
+    int sleep = 0;
+    // TODO: Convert to config parameters without making the config file too heavy, hmm
+    switch( m_clock.weekday )
+    {
+    case 0: // sunday, 10am to 10pm
+        sleep = ((m_clock.hour>=10) && (m_clock.hour<22)? 0:1); break;
+    case 1: // monday-wednesday, 12pm to 10pm
+    case 2:
+    case 3:
+        sleep = ((m_clock.hour>=12) && (m_clock.hour<22)? 0:1); break;
+    case 4:
+    case 5: // thursday-friday, 12pm to 11pm
+        sleep = ((m_clock.hour>=12) && (m_clock.hour<23)? 0:1); break;
+    case 6: // saturday, 10am-11pm
+        sleep = ((m_clock.hour>=10) && (m_clock.hour<23)? 0:1); break;
+    }
+    
+    if( m_sleep!=sleep )
+    {
+        const char* weekday[] = {"Sun","Mon","Tue","Wed","Thu","Fri","Sat"};
+        printf( "DominoFX: Time is %s %i:%i:%i ...\n",
+            weekday[m_clock.weekday], m_clock.hour, m_clock.minute, m_clock.second );
+        if( (m_params.sleepEnable==0) && (sleep!=0) )
+        {
+            printf( "DominoFX: Ignoring SLEEP mode, disabled ...\n" );
+        }
+        printf( "DominoFX: Entering %s mode ...\n", ( (sleep && (m_params.sleepEnable!=0))? "SLEEP" : "AWAKE") );
+        m_sleep = sleep;
+    }    
+
+    //printf("UpdateSleep() m_sleep = %i \n",(int)sleep);
 }
 
 void DominoSensorMaster::ProcessHeartbeat( const char *argsData, int argsSize, const IpEndpointName& remoteEndpoint )
 {
-    float param = 1.0f;
-    m_soundServer.Send(m_params.heartbeatTag, 1, &param);
+    m_activity += 0.05;
+    m_activity = CLAMP( m_activity, 0,1 );
+    
+    if( m_heartbeatRampout<=0 )
+    {    
+        if( m_context.GetDebugDiagStream() )
+        {
+            //printf("heartbeat worker->master\n");
+            printf("heartbeat master->sound\n");
+        }
+        
+        if( m_soundServer!=nullptr )
+        {
+            float param = 1.0f;
+            m_soundServer->Send(m_params.heartbeatTag, 1, (float*)(&param));
+        }
+
+        m_heartbeatRampout = (int)(0.2f * m_params.continuousFPS); // One-fifth of a second
+        m_heartbeatCount++;
+    }
 }
 
 void DominoSensorMaster::ProcessHeartbeat( const char *argsData, int argsSize, const IpEndpointName& remoteEndpoint, void* param )
@@ -600,9 +796,9 @@ void DominoSensorMaster::ProcessHeartbeat( const char *argsData, int argsSize, c
 
 void DominoSensorMaster::ProcessConfirmSound( const char *argsData, int argsSize, const IpEndpointName& remoteEndpoint )
 {
-    printf( "DominoFX: Received configuration confirm from sound master ...\n" );
     if( !m_soundConfigured )
     {
+        printf( "DominoFX: Received configuration confirm from sound master ...\n" );
         m_soundConfigured = true;
     }
 }
@@ -611,6 +807,28 @@ void DominoSensorMaster::ProcessConfirmSound( const char *argsData, int argsSize
 {
     DominoSensorMaster* parent = (DominoSensorMaster*)param;
     parent->ProcessConfirmSound(argsData,argsSize,remoteEndpoint);
+}
+
+void DominoSensorMaster::ProcessConfigDomino( const char *argsData, int argsSize, const IpEndpointName& remoteEndpoint )
+{
+    int* args = (int*)argsData;
+    int index = little_endian( args[0] );
+    int port = remoteEndpoint.port;
+    char address[IpEndpointName::ADDRESS_STRING_LENGTH];
+    remoteEndpoint.AddressAsString( address );
+    
+    if( m_workersConfigured==0 )
+    {
+        printf( "DominoFX: Received configuration from worker %i, at %s:%i ...\n",
+            (int)index,address,port );
+    }
+    RegisterWorker( address, port, index );
+}
+
+void DominoSensorMaster::ProcessConfigDomino( const char *argsData, int argsSize, const IpEndpointName& remoteEndpoint, void* param )
+{
+    DominoSensorMaster* parent = (DominoSensorMaster*)param;
+    parent->ProcessConfigDomino(argsData,argsSize,remoteEndpoint);
 }
 
 
@@ -623,12 +841,18 @@ void DominoSensorMaster::ProcessConfirmSound( const char *argsData, int argsSize
 DominoSensorWorker::DominoSensorWorker( DominoController& context ):
   DominoSensorAgent(context)
 , m_initialized(false)
-, m_soundConfigured(0)
-, m_multiplexerAvailable1(0)
-, m_multiplexerAvailable2(0)
-, m_heartbeatCountdown(0)
-, m_heartbeatTotal(0)
+, m_diagServer(nullptr)
+, m_masterBroadcast(nullptr)
+, m_masterServer(nullptr)
+, m_masterRemote(0)
 , m_activity(1.0f)
+, m_sleep(0)
+, m_clock{0,0,0,0}
+, m_soundServer(nullptr)
+, m_soundConfigured(0)
+, m_multiplexerAvailable{0,0}
+, m_updateCount(0)
+, m_dominoCount(0)
 {
 }
 
@@ -641,6 +865,7 @@ DominoSensorWorker::~DominoSensorWorker()
     }
     m_sensor.resize(0);
     m_state.resize(0);
+    m_diagData.resize(0);
 }
 
 
@@ -648,36 +873,87 @@ bool DominoSensorWorker::Init()
 {
     DominoSensorAgent::Init(); // base class method
 
-    if( (m_params.workerToSoundAddress.length()!=0) && (m_params.workerToSoundPort!=0) )
+    //
+    // Sensor setup
+    // Params related to sensor count and bus are not reloadable
+    //
+
+    m_dominoCount = m_context.GetDominoLocalCount();
+    m_sensor.resize( m_dominoCount );
+    m_state.resize( m_dominoCount );    
+
+    printf( "DominoFX: Initializing I2C bus %s... \n", m_params.i2cDevice.c_str() );
+    m_bus.Init( m_params.i2cDevice.c_str() );
+
+    // Check if mux chips are available
+    printf( "DominoFX: Scanning for multiplexers... \n" );
+    int multiplexerErr[2] = {0,0};
+    multiplexerErr[0] = m_bus.WriteGlobal( m_params.multiplexerAddress0, 0x00 );
+    multiplexerErr[1] = m_bus.WriteGlobal( m_params.multiplexerAddress1, 0x00 );
+    
+    m_multiplexerAvailable[0] = (multiplexerErr[0]? 0:1);
+    if( !m_multiplexerAvailable[0] )
     {
-        printf( "DominoFX: Connecting to OSC at %s : %i ...\n",
-            m_params.workerToSoundAddress.data(), m_params.workerToSoundPort );
-        m_soundServer.Init( m_params.workerToSoundAddress, m_params.workerToSoundPort );
+        printf( "DominoFX: Missing multiplexer 1 \n" );
     }
 
-    // TODO: Implement startup handshake with Master, determine master address and port
-    std::string workerToMasterAddress = m_params.workerToMasterAddress;
-    if( workerToMasterAddress.length()!=0 )
+    m_multiplexerAvailable[1] = (multiplexerErr[1]? 0:1);
+    if( !m_multiplexerAvailable[1] )
     {
-        printf( "DominoFX: Connecting to master at %s : %i ...\n",
-            workerToMasterAddress.data(), m_params.workerToMasterPort );
-        m_heartbeatServer.Init( workerToMasterAddress, m_params.workerToMasterPort );
+        printf( "DominoFX: Missing multiplexer 2 \n" );
     }
 
-    // Transmit config data to OSC
-    if( m_soundServer.IsInitialized() )
+
+    // Create sensor objects
+    printf( "DominoFX: Scanning for %i sensors... \n", (int)(m_dominoCount) );
+    for( int sensorIndex=0; sensorIndex<m_sensor.size(); sensorIndex++ )
     {
-        m_context.RegisterSoundToWorkerCallback( m_params.confirmTag.data(), ProcessConfirmSound, this );
+        SensorAddress sensorAddress;
+        m_params.InitSensorAddress( &sensorAddress, sensorIndex );
+        
+        if( m_multiplexerAvailable[ sensorAddress.muxWhich ] )
+        {
+            printf( "DominoFX: Checking sensor %i, mux address %X, field %X ... \n",
+                (int)sensorIndex, sensorAddress.muxAddress, sensorAddress.muxField );
+
+            // auto-detect LIS3DH or BMA220 motion sensor
+            if( LIS3DH::IsAvailable( &m_bus, &sensorAddress ) )
+            {
+                m_sensor[sensorIndex] = new LIS3DH(m_context);
+            }
+            else if( BMA220::IsAvailable( &m_bus, &sensorAddress ) )
+            {
+                m_sensor[sensorIndex] = new BMA220(m_params);
+            }
+            else
+            {
+                printf( "DominoFX: No motion sensor %i... \n", (int)sensorIndex );
+                m_sensor[sensorIndex] = nullptr;
+            }
+        }
+        else
+        {
+            printf( "DominoFX: Skipping motion sensor %i, missing multiplexer... \n", (int)sensorIndex );
+            m_sensor[sensorIndex] = nullptr;
+        }
+    }
+    
+    // Create state objects
+    for( int sensorIndex=0; sensorIndex<m_dominoCount; sensorIndex++ )
+    {
+        // Allow DominoState object even if no sensor available, will return default values
+        //if( m_sensor[sensorIndex]!=nullptr )
+        //{
+            m_state[sensorIndex] = new DominoState(m_context);
+            m_state[sensorIndex]->Init( sensorIndex );
+        //}
+        //else m_state[sensorIndex] = nullptr;
     }
 
-    m_state.resize( m_params.dominoCount );    
-    for( int sensorIndex=0; sensorIndex<m_params.dominoCount; sensorIndex++ )
-    {
-        m_state[sensorIndex] = new DominoState(m_params);
-        m_state[sensorIndex]->Init( sensorIndex );
-    }
+    // Make OSC connections and reload other params
+    Reload();    
 
-    // Launch sensor input thread
+    // Launch sensor thread
     StartSensorThread();
     
     m_initialized = true;
@@ -685,38 +961,195 @@ bool DominoSensorWorker::Init()
     return m_initialized;
 }
 
+void DominoSensorWorker::Reload()
+{
+    // Lock, only one thread may have access to m_sensor[]
+    std::lock_guard<std::mutex> lock(m_mutex);
+    
+    // Reload sensor hardware params
+    for( int sensorIndex=0; sensorIndex<m_sensor.size(); sensorIndex++ )
+    {
+        if( m_sensor[sensorIndex]!=nullptr )
+        {
+            SensorAddress sensorAddress;
+            m_params.InitSensorAddress( &sensorAddress, sensorIndex );
+            m_sensor[sensorIndex]->Init( &m_bus, &sensorAddress );
+        }
+    }
+     
+    // Reload domino state params
+    for( int sensorIndex=0; (sensorIndex<m_dominoCount) && (sensorIndex<m_state.size()); sensorIndex++ )
+    {
+        if( m_state[sensorIndex]!=nullptr )
+        {
+            m_state[sensorIndex]->Reload();
+        }
+    }
+        
+    // Restart transmitter connection to sound worker, sends sensor data
+    if( (m_params.workerToSoundAddress.length()!=0) && (m_params.workerToSoundPort!=0) )
+    {
+        if( m_soundServer!=nullptr  )
+        {
+            printf( "DominoFX: Connecting to OSC at %s : %i ...\n",
+                m_params.workerToSoundAddress.data(), m_params.workerToSoundPort );
+        }
+        SAFE_DELETE( m_soundServer );
+        m_soundServer = new OscController();
+        m_soundServer->Open( m_params.workerToSoundAddress, m_params.workerToSoundPort );
+    }
+
+    SAFE_DELETE_ARRAY( m_masterServer );
+    SAFE_DELETE_ARRAY( m_masterBroadcast );
+    if( m_params.dominoModuleCount>1 )
+    {
+        // Multiple modules; master is running on another machine, broadcast to it
+        m_masterBroadcast = new OscBroadcaster();
+        m_masterBroadcast->Open( m_params.workerToMasterPort );
+        m_masterRemote = 0;
+    }
+    else
+    {
+        // One module in hybrid mode; master is running locally
+        m_masterServer = new OscController();
+        m_masterServer->Open( "127.0.0.1", m_params.workerToMasterPort );
+        m_masterRemote = 0;
+    }
+
+    // Restart receiver sockets from domino master
+    m_context.RegisterMasterToWorkerCallback( m_params.heartbeatTag.data(), ProcessHeartbeat, this );
+    m_context.RegisterMasterToWorkerCallback( m_params.clockTag.data(), ProcessClock, this );
+
+    // Restart receiver socket from sound worker
+    // Received config confirm to OSC
+    m_context.RegisterSoundToWorkerCallback( m_params.confirmTag.data(), ProcessConfirmSound, this );
+
+    // Restart transmistter socket to diagnostic server
+    printf( "DominoFX: DIAGNOSTICS SERVER SUPPORT DISABLED \n" );
+//    if( (m_params.workerToDiagAddress.length()!=0) && (m_params.workerToDiagPort!=0) )
+//    {
+//        if( m_diagServer!=nullptr  )
+//        {
+//            printf( "DominoFX: Connecting to diagnostics at %s : %i \n",
+//                m_params.workerToDiagAddress.data(), m_params.workerToDiagPort );
+//        }
+//        SAFE_DELETE( m_diagServer );
+//        m_diagServer = new OscController();
+//        m_diagServer->Open( m_params.workerToDiagAddress, m_params.workerToDiagPort );
+//    }
+}
+
 void DominoSensorWorker::Update( DmxFrame& dmxout )
 {
     int active = 0;
     int bit = 1;
-    for (int sensorIndex = 0; sensorIndex < m_params.dominoCount; ++sensorIndex)
+    int oscParamIndex = 0;
+    int oscParamCount = (1*m_context.GetDominoLocalCount());
+    //int oscParamCount = (3*m_context.GetDominoLocalCount());
+    float* oscParams = new float[oscParamCount];
+    //FVec3_t accel;
+    float angle;
+    
+    for (int sensorIndex=0; sensorIndex<m_dominoCount; sensorIndex++)
     {
         Update(sensorIndex);
-        
-        // fade out when activity is low
-        dmxout[sensorIndex] = LERP( 10, m_state[sensorIndex]->ValDMX(), m_activity );
-        
-        //if( sensorIndex!=0 ) // TODO: Remove this check, temporary because sensor zero is glitchy
+     
+        if( m_state[sensorIndex]!=nullptr )
         {
+            // fade out when activity is low
+            dmxout[sensorIndex] = LERP( m_params.dmxBaseline, m_state[sensorIndex]->ValDMX(), m_activity );
+            
             if( m_state[sensorIndex]->Active() )
                 active = (active | bit);
+            //accel = m_state[sensorIndex]->Accel();
+            angle = m_state[sensorIndex]->Angle();
         }
+        else // no sensor, set acceleration to zero
+        {
+            angle = 0;
+            //accel.x = accel.y = accel.z = 0;
+        }
+        
+        //oscParams[oscParamIndex++] = m_state[sensorIndex]->VelocFiltered();
+        //oscParams[oscParamIndex++] = m_state[sensorIndex]->AngleFiltered();
+        
+        oscParams[oscParamIndex++] = angle;
+        //oscParams[oscParamIndex++] = accel.x;
+        //oscParams[oscParamIndex++] = accel.y;
+        //oscParams[oscParamIndex++] = accel.z;
+        
         bit = (bit<<1);
     }
-    
-    // TODO: Implement improved blending between interactive and idle mode
-    m_activity += (active? 0.05 : -0.0003);
-    m_activity = CLAMP( m_activity, 0,1 );
-    
-    // Send heartbeat
-    m_heartbeatCountdown--;
-    if( (m_heartbeatCountdown<=0) && active )
+
+    // Send sound signal - every update, not only when the domino is active
+    m_soundServer->Send(m_params.interactTag, oscParamCount, oscParams);
+    delete[] oscParams;
+
+    // Send diagnostic signal
+    if( m_context.GetDebugDiagServer() )
     {
-        printf("heartbeat worker->master %i\n", m_heartbeatTotal);
-        m_heartbeatServer.Send( m_params.heartbeatTag, 1, (float*)(&active) );
-        m_heartbeatCountdown = (int)(0.2f * m_params.continuousFPS); // One-fifth of a second
-        m_heartbeatTotal++;
+        int sensorCount = m_context.GetDominoLocalCount();
+        int elementCount = 7;
+        int preambleCount = 1;
+        int diagDataCount = preambleCount + (elementCount * sensorCount);
+        m_diagData.resize( diagDataCount );
+        m_diagData[0] = (float)m_updateCount;
+        for (int sensorIndex = 0; sensorIndex<sensorCount; sensorIndex++)
+        {
+            DominoState* state = GetState(sensorIndex);
+            ISensor* sensor = GetSensor(sensorIndex);
+            int a = preambleCount + (sensorIndex*elementCount);
+            m_diagData[a+0] = (state==nullptr?  0 : state->AngleFiltered());
+            m_diagData[a+1] = (sensor==nullptr? 0 : sensor->GetData()->acceleration.x);
+            m_diagData[a+2] = (sensor==nullptr? 0 : sensor->GetData()->acceleration.y);
+            m_diagData[a+3] = (state==nullptr?  0 : (state->Tap()? state->TapMagnitude() : (state->Active()? 1.0f : 0.0f)));
+            m_diagData[a+4] = (float)(dmxout[sensorIndex]/255.0f);
+            m_diagData[a+5] = (state==nullptr?  0 : (float)(state->Err()));
+            m_diagData[a+6] = (state==nullptr?  0 : state->VelocFiltered() );
+        }
+        m_diagServer->Send( m_params.diagTag, diagDataCount, m_diagData.data() );
     }
+    if( m_context.GetDebugDiagStream() )
+    {
+        bool anyActive=false;
+        int sensorCount = m_context.GetDominoLocalCount();
+        for (int sensorIndex = 0; sensorIndex<sensorCount; sensorIndex++)
+        {   // first pass, check if any domino is active
+            DominoState* state = GetState(sensorIndex);
+            if( state->Active() )
+                anyActive=true;
+        }
+        if( anyActive )
+        {   // second pass, print out values if any domino active
+            for (int sensorIndex = 0; sensorIndex<sensorCount; sensorIndex++)
+            {
+                DominoState* state = GetState(sensorIndex);
+                float angle = state->Angle();
+                if( state->Active() )
+                    printf( (angle<0? " %.2f " : "  %.2f "), (int)sensorIndex, (float)angle );
+                else
+                    printf( " ----- " );
+            }
+            printf( "\n" );
+        }
+    }
+    
+    //
+    // Heartbeat from domino worker to master
+    // Sent only if a domino is actively moving
+    //
+    if( active )
+    {
+        if( m_masterServer!=nullptr )
+        {
+            //printf("heartbeat worker->master %i\n", m_heartbeatCount);
+            m_masterServer->Send( m_params.heartbeatTag, 1, (float*)(&active) );
+        }
+    }
+ 
+    m_updateCount += 1;
+    // magic number 9240 is kinda random but has lots of factors, divides nicely by many other numbers
+    //m_updateCount = (m_updateCount%9240); //keep updateCount from running away
 }
 
 DominoState* DominoSensorWorker::GetState( int sensorIndex )
@@ -733,24 +1166,50 @@ ISensor* DominoSensorWorker::GetSensor( int sensorIndex )
     return m_sensor[sensorIndex];
 }
 
+bool DominoSensorWorker::IsRemote()
+{
+    return (m_masterRemote!=0);
+}
+
 int DominoSensorWorker::SendConfig()
 {
-    // Send config to sound worker via OSC, until it has acknoledged with a confirm
-    if( (!m_soundConfigured) && m_soundServer.IsInitialized() )
+    // Send config to sound worker
+    // Send redundantly, to support reconnect if either program is restarted
+    if( m_soundServer!=nullptr )
     {
-        printf( "DominoFX: Sending configuration init to sound worker ...\n" );
-        
-        // TODO: Implement startup handshake, don't use this temp solution
+        if( (!m_soundConfigured) && m_soundServer->Opened() )
+            printf( "DominoFX: Sending configuration init to sound worker ...\n" );
         
         static std::string configTag("/configWorker");
-        int param0 = m_params.debugOscConfig0;
-        int param1 = m_params.debugOscConfig1;
+        int param0 = m_params.soundIntrument;
+        int param1 = m_params.soundModuleIndex;
         int paramIPCount = 0; // hard coded because worker does not send IP addresses
         const char** paramIP = nullptr; // hard coded because worker does not send IP addresses
         
-        m_soundServer.Send( configTag, param0, param1, paramIPCount, paramIP );
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        m_soundServer->Send( configTag, param0, param1, paramIPCount, paramIP );
     }
+    
+    // Send config to domino master
+    // Send redundantly, to support reconnect if either program is restarted
+    if( m_masterBroadcast!=nullptr )
+    {
+        int params[] = {m_params.dominoModuleIndex};
+        if( m_masterServer==nullptr )
+            printf( "DominoFX: Sending configuration init to master (broadcast), index %i ...\n", params[0] );
+        m_masterBroadcast->Send( m_params.configTag, 1, params );
+    }
+    else if( m_masterServer!=nullptr )
+    {
+        int params[] = {m_params.dominoModuleIndex};
+        if( m_masterServer==nullptr )
+            printf( "DominoFX: Sending configuration init to master (local), index %i ...\n", params[0] );
+        m_masterServer->Send( m_params.configTag, 1, params );
+    }
+}
+
+int DominoSensorWorker::GetSleep()
+{
+    return m_sleep;
 }
 
 // 
@@ -763,14 +1222,14 @@ bool DominoSensorWorker::Update(uint8_t sensorIndex)
     if( (sensorIndex<0) || (sensorIndex >= m_sensor.size()) ||
         (m_sensor[sensorIndex]==nullptr) )
     {
-        if( m_context.m_debugOutput )
+        if( m_context.GetDebugVerbose() )
         {
             printf( "ERROR: DominoControllerWorker::Send() no sensor at index %i\n", sensorIndex );
         }
         return 0;
     }
 
-    if( m_context.m_debugOutput )
+    if( m_context.GetDebugVerbose() )
     {
         printf( "---------- ----------\n" );
         printf("Sensor %i\n", sensorIndex);
@@ -779,41 +1238,39 @@ bool DominoSensorWorker::Update(uint8_t sensorIndex)
 
     const SensorData* sensorData = m_sensor[sensorIndex]->GetData();
 
-    if( m_context.m_debugOutput )
-    {
-        const FVec3_t& v = sensorData->acceleration;
-        printf( "  Accel normalized:\t (%.3f,%.3f,%.3f)\n",
-            (float)(v.x), (float)(v.y), (float)(v.z) );
-    }
-
     DominoState* state = m_state[sensorIndex];
     state->Update( sensorData, (Axis)m_params.sensorAxis );
+
+    if( m_context.GetDebugVerbose() )
+    {
+        printf( "---------- ----------\n" );
+        printf( "  Angle:\t %.3f\n", (float)(state->Angle()) );
+        printf( "  Angle Up:\t %.3f\n", (float)(state->AngleUp()) );
+    }
 
 
     // Send tap signal (only if tap was detected)
     bool tap = state->Tap();
     if( tap )
     {
-        //if( sensorIndex!=0 ) // TODO: Remove this check, temporary because sensor zero is glitchy
-        {
-            m_soundServer.Send(m_params.interactTag, sensorIndex, 0, (float*)nullptr);
-        }
+        float tapMagnitude = state->TapMagnitude();
+        float oscParams[1] = { tapMagnitude };
+        m_soundServer->Send(m_params.interactTag, sensorIndex, 1, oscParams);
     }
 
-    // Send speed and angle signal
-    if( state->Active() && state->AccelSend() )
-    {
-        //float veloc = state->Veloc() * m_params.sensorVelocityMultiplier;
-        //float angle = state->Angle();
-        float velocAvg = state->VelocAvg() * m_params.sensorVelocityMultiplier;
-        float angleAvg = state->AngleAvg();
-        float oscParams[2] = { velocAvg, angleAvg };
-        m_soundServer.Send(m_params.interactTag, sensorIndex, 2, oscParams);
-        state->AccelSent();
-    }
+    // Send every update, not only when the domino is active
+//    {
+//        //float veloc = state->Veloc() * m_params.sensorVelocityMultiplier;
+//        //float angle = state->Angle();
+//        float velocFiltered = state->VelocFiltered();
+//        float angleFiltered = state->AngleFiltered();
+//        float oscParams[2] = { velocFiltered, angleFiltered };
+//        m_soundServer->Send(m_params.interactTag, sensorIndex, 2, oscParams);
+//    }
     
     return true;
 }
+
 
 
 // 
@@ -824,107 +1281,53 @@ int DominoSensorWorker::StartSensorThread()
 {
     int result = 0;
 
-    printf( "DominoFX: Initializing I2C bus... \n" );
-    m_bus.Init( m_params.i2cDevice.data() );
-
-    // Toggle the mux off (all of them)
-    int multiplexerErr1 = 0, multiplexerErr2 = 0;
-    multiplexerErr1 = m_bus.WriteGlobal( m_params.multiplexerAddress1, 0x00 );
-    multiplexerErr2 = m_bus.WriteGlobal( m_params.multiplexerAddress2, 0x00 );
-    
-    m_multiplexerAvailable1 = (multiplexerErr1? 0:1);
-    if( !m_multiplexerAvailable1 )
+    if( m_sensorThread.get_id()==std::thread::id() )
     {
-        m_multiplexerAvailable1 = 0;
-        printf( "DominoFX: Missing multiplexer 1 \n" );
+        printf( "DominoFX: Launching DominoSensor thread...\n" );
+        m_sensorThread = std::thread(SensorThreadBootstrap,this);
     }
-
-    m_multiplexerAvailable2 = (multiplexerErr2? 0:1);
-    if( !m_multiplexerAvailable2 )
-    {
-        m_multiplexerAvailable2 = 0;
-        printf( "DominoFX: Missing multiplexer 2 \n" );
-    }
-
-    m_sensor.resize( m_params.dominoCount );
-
-    SensorParams sensorParams;
-    sensorParams.tapThresh       = m_params.sensorTapThresh;
-    sensorParams.tapTimeLimit    = m_params.sensorTapTimeLimit;
-    sensorParams.tapTimeLatency  = m_params.sensorTapTimeLatency;
-    sensorParams.tapTimeWindow   = m_params.sensorTapTimeWindow;
-
-    // TODO: Move this to DominoSensorWorker::Init()
-    
-    printf( "DominoFX: Scanning for %i sensors... \n", (int)(m_params.dominoCount) );
-    for( int sensorIndex=0; sensorIndex<m_sensor.size(); sensorIndex++ )
-    {
-        sensorParams.index = sensorIndex;
-        
-        if( (sensorIndex<m_params.multiplexerLanes) && m_multiplexerAvailable1 )
-        {
-            sensorParams.muxAddress = m_params.multiplexerAddress1;
-            int muxIndex = sensorIndex;
-            sensorParams.muxField = (1<<(muxFieldOrder[muxIndex]));
-        }
-        else if( m_multiplexerAvailable1 )
-        {
-            sensorParams.muxAddress = m_params.multiplexerAddress2;
-            int muxIndex = (sensorIndex-m_params.multiplexerLanes);
-            sensorParams.muxField = (1<<(muxFieldOrder[muxIndex]));
-        }
-        printf( "DominoFX: Sensor at index %i, mux address %X, field %X ... \n", (int)sensorIndex, sensorParams.muxAddress, sensorParams.muxField );
-
-        // auto-detect LIS3DH or BMA220 motion sensor
-        if( LIS3DH::IsAvailable( &m_bus, &sensorParams ) )
-        {
-            m_sensor[sensorIndex] = new LIS3DH();
-            m_sensor[sensorIndex]->Init( &m_bus, &sensorParams );
-        }
-        else if( BMA220::IsAvailable( &m_bus, &sensorParams ) )
-        {
-            m_sensor[sensorIndex] = new BMA220();
-            m_sensor[sensorIndex]->Init( &m_bus, &sensorParams );
-        }
-        else
-        {
-            printf( "DominoFX: No motion sensor at index %i... \n", (int)sensorIndex );
-            m_sensor[sensorIndex] = nullptr;
-        }
-    }
-
-    printf( "DominoFX: Launching DominoSensor thread...\n" );
-    m_sensorThread = std::thread(SensorThread,this);
     return result;
 }
 
-void DominoSensorWorker::SensorThread( DominoSensorWorker* parent )
+void DominoSensorWorker::SensorThread()
 {
-    printf( "DominoFX: Sensor thread started\n" );
+    printf( "DominoFX: Started sensor thread...\n" );
     while( !signal_shutdown )
     {
-        I2CBus& bus = parent->m_bus;
-
-        int sensorCount = parent->m_sensor.size();
-        for (int sensorIndex = 0; sensorIndex < sensorCount; ++sensorIndex)
+        // Lock, only one thread may have access to m_sensor[]
+        std::lock_guard<std::mutex> lock(m_mutex);
+        
+        int sensorCount = m_sensor.size();
+        for( int sensorIndex = 0; sensorIndex < sensorCount; sensorIndex++ )
         {
-            ISensor* sensor = parent->m_sensor[sensorIndex];
+            ISensor* sensor = m_sensor[sensorIndex];
             if( sensor != nullptr )
             {
-                sensor->Sample( &bus );
+                sensor->Sample( &m_bus );
             }
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
-    printf( "DominoFX: Sensor thread stopped\n" );
+    printf( "DominoFX: Stopped sensor thread\n" );
 }
 
+void DominoSensorWorker::ProcessHeartbeat( const char *argsData, int argsSize, const IpEndpointName& remoteEndpoint )
+{
+    float* args = (float*)argsData;
+    m_activity = little_endian( args[0] );
+}
+
+void DominoSensorWorker::ProcessHeartbeat( const char *argsData, int argsSize, const IpEndpointName& remoteEndpoint, void* param )
+{
+    DominoSensorWorker* parent = (DominoSensorWorker*)param;
+    parent->ProcessHeartbeat(argsData,argsSize,remoteEndpoint);
+}
 
 void DominoSensorWorker::ProcessConfirmSound( const char *argsData, int argsSize, const IpEndpointName& remoteEndpoint )
 {
-    printf( "DominoFX: Received configuration confirm from sound worker ...\n" );
     if( !m_soundConfigured )
     {
+        printf( "DominoFX: Received configuration confirm from sound worker ...\n" );
         m_soundConfigured = true;
     }
 }
@@ -933,4 +1336,41 @@ void DominoSensorWorker::ProcessConfirmSound( const char *argsData, int argsSize
 {
     DominoSensorWorker* parent = (DominoSensorWorker*)param;
     parent->ProcessConfirmSound(argsData,argsSize,remoteEndpoint);
+}
+
+void DominoSensorWorker::ProcessClock( const char *argsData, int argsSize, const IpEndpointName& remoteEndpoint )
+{
+    int* args = (int*)argsData;
+    m_sleep = little_endian( args[0] );
+    m_clock.weekday = little_endian( args[1] );
+    m_clock.hour    = little_endian( args[2] );
+    m_clock.minute  = little_endian( args[3] );
+    m_clock.second  = little_endian( args[4] );
+    
+    // Clock message serves a secondary purpose, as a config confirmation...
+    // Open a socket to transmit to master when it confirms with address and port number
+    if( m_masterServer==nullptr  )
+    {
+        int port = remoteEndpoint.port;
+        char address[IpEndpointName::ADDRESS_STRING_LENGTH];
+        remoteEndpoint.AddressAsString(address);
+        
+        m_masterServer = new OscController();
+        m_masterRemote = (strcmp(address,"127.0.0.1")==0? 0:1); // is the master localhost?
+        
+        printf( "DominoFX: Received configuration confirm from master %s:%i ...\n",
+            address, port );
+        const char* weekday[] = {"Sun","Mon","Tue","Wed","Thu","Fri","Sat"};
+        printf( "DominoFX: Time from domino master is %s %i:%i:%i, %s ...\n",
+            weekday[m_clock.weekday], m_clock.hour, m_clock.minute, m_clock.second, (m_sleep?"SLEEP":"AWAKE") );
+            
+        printf( "DominoFX: Connecting to master at %s : %i ...\n", address, m_params.workerToMasterPort );
+        m_masterServer->Open( address, m_params.workerToMasterPort );
+    }        
+}
+
+void DominoSensorWorker::ProcessClock( const char *argsData, int argsSize, const IpEndpointName& remoteEndpoint, void* param )
+{
+    DominoSensorWorker* parent = (DominoSensorWorker*)param;
+    parent->ProcessClock(argsData,argsSize,remoteEndpoint);
 }

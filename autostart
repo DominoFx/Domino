@@ -1,0 +1,9 @@
+@lxpanel --profile LXDE-pi
+@pcmanfm --desktop --profile LXDE-pi
+@xscreensaver -no-splash
+@point-rpi
+
+@chmod 777 /home/pi/Domino/watchdog.sh
+@lxterminal -e /home/pi/Domino/watchdog.sh
+
+#@scide /home/pi/Documents/domino-proto1.scd

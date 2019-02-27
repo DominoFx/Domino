@@ -1,10 +1,13 @@
-#killall sclang
-#killall scsynth
 
-#echo sleeping for five seconds...
-#sleep 5
+#
+# Launch program
+#
 
 cd /home/pi/Domino
-sclang ./SuperCollider/demo_181012-worker.scd  2>>error_soundWorker.txt
+echo `date` >>/home/pi/Domino/error_sound_worker.txt
+sclang /home/pi/Domino/SuperCollider/dominoWorker_181209.scd 2>>/home/pi/Domino/error_sound_worker.txt
 
-read -n 1 -s
+
+# Wait for user input; if lxterminal was launched at startup,
+# prevent the window from closing on ctrl-c, but this never worked, hmm
+#read -n 1 -s

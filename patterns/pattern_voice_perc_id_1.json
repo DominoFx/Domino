@@ -1,0 +1,10 @@
+{
+    "name":"VOICE PERCUSSION STATION - ID 1",
+    "id":11, 
+    "baselineValueDMX" : 30, 
+    "sequence":
+    [
+        { "fade":"00s 120", "sustain":"00s 000", "dmx":[ {"-1":60},{"0":150},{"1":60} ] },
+        { "fade":"02s 500", "sustain":"00s 000", "dmx":[] }
+    ]
+}

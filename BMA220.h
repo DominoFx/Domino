@@ -18,26 +18,40 @@
 #include <stdint.h>
 #include <mutex>
 
+// 
+// Classes
+// 
+
+class DominoParams;
+
+
+//
+// Class BMA220
+// Motion sensor
+//
+
 class BMA220: public ISensor {
 public:
-    BMA220();
+    BMA220( DominoParams& params );
     virtual ~BMA220();
 
     // local methods
-    static int IsAvailable( I2CBus* bus, SensorParams* params );
+    static int IsAvailable( I2CBus* bus, SensorAddress* params );
     
     // from ISensor
-    int Init( I2CBus* bus, SensorParams* params ); 
+    int Init( I2CBus* bus, SensorAddress* params ); 
     int Sample( I2CBus* bus );
     const SensorData* GetData();
-    const SensorParams* GetParams();
+    const SensorAddress* GetAddress();
     void DebugPrint();
 
 private:
+    DominoParams& m_params;
+    
     double Realdata (int data);
 
     std::mutex m_mutex;
-    SensorParams m_params;
+    SensorAddress m_address;
     SensorData m_data;
 
     struct SensorSample

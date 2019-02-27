@@ -4,21 +4,31 @@
 #include "DominoState.h"
 #include "OscController.h"
 #include "enttecdmxusb.h"
-//#include "ip/UdpSocket.h"
-//#include "ip/PacketListener.h"
 
+#include <json/json.h>
 #include <thread>
 #include <mutex>
 // STL headers
 #include <vector>
 
+//
+// Classes
+//
+
 class DominoController;
 class DominoSensorMaster;
 class DominoSensorWorker;
 
+//
+// Typedefs
+//
+
 typedef int DmxFrame[NB_CANAUX_MAX+1];
 
 
+//
+// Class DominoPlayerSequence
+//
 
 class DominoPlayerSequence
 {
@@ -59,11 +69,13 @@ public:
     Frame*     GetFrame( int index ); // frame at given index
 protected:
     DominoController& m_context;
+    DominoParams& m_params;
     int        m_id;
     String     m_name;
     double     m_duration;
     FrameVec   m_dmxFrames;
 };
+
 
 //
 // Class DominoPlayerAgent 
@@ -76,6 +88,7 @@ public:
     virtual ~DominoPlayerAgent();
 
     bool Init() {}
+    virtual void Reload() = 0;
 
 protected:
     DominoController& m_context;
@@ -117,10 +130,9 @@ public:
     virtual ~DominoPlayerMaster();
 
     bool Init();
+    void Reload();
     void Update();
     
-    bool RegisterWorker( const std::string& workerAddress, int workerPort, int workerIndex );
-
     bool LoadSequences( const char* filename ); // config sequences file
     bool LoadSequence( const char* filename );  // single sequence file
     bool PlaySequence( int id, int dmxCenterpoint );
@@ -143,11 +155,6 @@ protected:
     SequencesMap m_sequencesMap;
     SequencesJson m_sequencesJson;
 
-    // Listener object, receives DMX play commands from OSC
-    //OscListener m_oscListener;
-    
-    std::vector<OscController*> m_workers;
-
     // Local methods
     //int StartOscThread();
     void ProcessIdleSound( const char *data, int size, const IpEndpointName& remoteEndpoint );
@@ -169,6 +176,7 @@ public:
     virtual ~DominoPlayerWorker();
 
     bool Init();
+    void Reload();
     void Update( DmxFrame& dmxout );
     
     float GetFPS() {return m_dmxFps;}
@@ -177,6 +185,7 @@ protected:
     bool m_initialized;
 
     // Channel values for DMX
+    int m_dominoCount;
     std::mutex m_mutex;
     DmxFrame m_dmxout;
     DmxFrame m_dmxoutSensor;
@@ -187,12 +196,8 @@ protected:
     EnttecDMXUSB* m_dmxInterface;
     std::chrono::time_point<std::chrono::system_clock> m_dmxLastUpdate;
     float m_dmxFps;
-    
-    // Listener object, receives DMX frames from master
-    //OscListener m_oscListener;
 
     // Local methods
-    //int StartOscThread();
     void ProcessIdleDmx( const char *argsData, int argsSize, const IpEndpointName& remoteEndpoint );
     static void ProcessIdleDmx( const char *argsData, int argsSize, const IpEndpointName& remoteEndpoint, void* param );
     int StartOutputDmxThread();
@@ -201,4 +206,3 @@ protected:
 };
 
 #endif /* DOMINOPLAYER_H */
-

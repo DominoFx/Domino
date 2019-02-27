@@ -12,9 +12,12 @@
  */
 
 #include "LISD3H.h"
+#include "dmx/DominoController.h"
+#include "dmx/DominoParams.h"
 #include <stdio.h>
 #include <thread>
 #include <chrono>
+#include <math.h>
 
 
 #define LIS3DH_ADDRESS_1_I2C     0x18 // if the SDO pin is low
@@ -87,7 +90,7 @@
 #define LIS3DH_HIGHRES_ENABLE         0x08
 
 // Control register 4 - Acceleration Range (sensitivity)
-#define LIS3DH_ACCELRANGE_BITMASK     0x00 // bitmask for this value
+#define LIS3DH_ACCELRANGE_BITMASK     0x30 // bitmask for this value
 #define LIS3DH_ACCELRANGE_2G          0x00
 #define LIS3DH_ACCELRANGE_4G          0x10
 #define LIS3DH_ACCELRANGE_8G          0x20
@@ -135,50 +138,50 @@
 #define LIS3DH_TAP_DETECTZ            0x04
 #define LIS3DH_TAP_DETECTXYZ          0x07
 
-#define LIS3DH_SAMPLES_PER_SECOND     200
 
-
-LIS3DH::LIS3DH():
-  m_addr(0)
+LIS3DH::LIS3DH( DominoController& context ):
+  m_context(context)
+, m_params(context.GetParams())
+, m_readCount(0)
+, m_sampleCount(0)
+, m_sampleIndex(0)
 {
     // HACK: Ensure some initial data appears populated during first GetData() call
     m_samples[0].count = 10;
-    m_sampleIndex = 0;
 }
 
 
 LIS3DH::~LIS3DH() {
 }
 
-int LIS3DH::IsAvailable( I2CBus* bus, SensorParams* params )
+int LIS3DH::IsAvailable( I2CBus* bus, SensorAddress* address )
 {
+    //printf("LIS3DH::IsAvailable() \n" );
     int result = 0;
 
-    int muxAddress = params->muxAddress; 
-    int muxField = params->muxField; 
-    uint8_t addrList[] = {LIS3DH_ADDRESS_1_I2C,LIS3DH_ADDRESS_2_I2C};
-    uint8_t addr = 0;
+    uint8_t addressList[] = {LIS3DH_ADDRESS_1_I2C,LIS3DH_ADDRESS_2_I2C};
 
     // Toggle the mux to the correct device
-    bus->WriteGlobal( muxAddress, muxField );
+    bus->WriteGlobal( address->muxAddress, address->muxField );
+    //printf("LIS3DH::IsAvailable() WriteGlobal() 0x%X : 0x%X, result=%i... \n", muxAddress, muxField, result);
 
     // Check the mux toggled correctly
     uint8_t muxField_check;
-    bus->ReadGlobal( muxAddress, &muxField_check );
-    if( muxField_check != muxField )
+    bus->ReadGlobal( address->muxAddress, &muxField_check );
+    if( muxField_check != address->muxField )
     {
         printf( "ERROR: LIS3DH::IsPresent() mux check got %i, expected %i\n",
-            (int)(muxField_check), (int)(muxField) );
+            (int)(muxField_check), (int)(address->muxField) );
         result = 1; // error flag
     }
 
     bus->SetDebugOutput( false );
     int resultPrev = result;
-    for( int i=0; (i<2) && (addr==0); i++ )
+    for( int i=0; (i<2) && (address->address==0); i++ )
     {
         result = resultPrev;
         // Doesn't work as expected, seems to always returns 1
-        int isPresent = bus->IsPresent( addrList[i] );
+        int isPresent = bus->IsPresent( addressList[i] );
         if( isPresent==0 )
         {
             result = 2; // error flag
@@ -186,8 +189,10 @@ int LIS3DH::IsAvailable( I2CBus* bus, SensorParams* params )
         else
         {
             // Read the useless WhoAmI register for confirmation
-            uint8_t whoAmI;
-            bus->ReadSingle( addrList[i], LIS3DH_REG_WHO_AM_I, &whoAmI );
+            int whoAmI=0; //uint8_t whoAmI;
+            bus->ReadSingle( addressList[i], LIS3DH_REG_WHO_AM_I, (uint8_t*)&whoAmI );
+            //printf("LIS3DH::IsAvailable() ReadSingle() addr=0x%x, whoAmI=0x%X... \n", (int)(addrList[i]), (int)whoAmI);
+            
             if( whoAmI != 0x33 )
             {
                 result = 3; // error flag
@@ -195,143 +200,151 @@ int LIS3DH::IsAvailable( I2CBus* bus, SensorParams* params )
         }
         
         if( result==0 )
-            addr = addrList[i];
+            address->address = addressList[i];
     }
     bus->SetDebugOutput( true );
 
     // Toggle the mux off
-    bus->WriteGlobal( muxAddress, 0 );
+    bus->WriteGlobal( address->muxAddress, 0 );
 
     return (result==0? 1:0);
 }
 
-int LIS3DH::Init( I2CBus* bus, SensorParams* params )
+int LIS3DH::Init( I2CBus* bus, SensorAddress* address )
 {
+    //printf("LIS3DH::Init() \n");
     int result = 0;
 
-    m_params = (*params);
+    m_address = (*address);
+    
+    m_lastPrint = std::chrono::system_clock::now();
+    m_lastReadCount = 0;
+    m_lastSampleCount = 0;
+    m_readCount = 0;
+    m_sampleCount = 0;
+    m_sampleQueue = m_params.sensorHWQueue;
 
     // Toggle unused mux chips off
     bus->WriteGlobal( 0x70, 0x0 ); // TODO: HACK add better handling for dual mux
     bus->WriteGlobal( 0x72, 0x0 ); // TODO: HACK add better handling for dual mux
     
     // Toggle the mux to the correct device 
-    bus->WriteGlobal( m_params.muxAddress, m_params.muxField );
+    bus->WriteGlobal( m_address.muxAddress, m_address.muxField );
 
     // Check the mux toggled correctly
     uint8_t muxField_check;
-    bus->ReadGlobal( m_params.muxAddress, &muxField_check );
-    if( m_params.muxField != muxField_check )
+    bus->ReadGlobal( m_address.muxAddress, &muxField_check );
+    if( m_address.muxField != muxField_check )
     {
         printf( "ERROR: LIS3DH::Init() mux check got %i, expected %i\n",
-            (int)(muxField_check), (int)(m_params.muxField) );
+            (int)(muxField_check), (int)(m_address.muxField) );
         result = 1; // error flag
     }
 
-    uint8_t addrList[] = {LIS3DH_ADDRESS_1_I2C,LIS3DH_ADDRESS_2_I2C};
-    uint8_t whoAmI;
+    uint8_t addressList[] = {LIS3DH_ADDRESS_1_I2C,LIS3DH_ADDRESS_2_I2C};
+    int whoAmI=0; //uint8_t whoAmI;
     bus->SetDebugOutput( false );
     int resultPrev = result;
-    for( int i=0; (i<2) && (m_addr==0); i++ )
+    for( int i=0; (i<2) && (m_address.address==0); i++ )
     {
         result = resultPrev;
         // Read the useless WhoAmI register to make sure we're synchronized
-        bus->ReadSingle( addrList[i], LIS3DH_REG_WHO_AM_I, &whoAmI );
+        bus->ReadSingle( addressList[i], LIS3DH_REG_WHO_AM_I, (uint8_t*)&whoAmI );
         if( whoAmI != 0x33 )
         {
             result = 2; // error flag
         }
-        else m_addr = addrList[i];
+        else m_address.address = addressList[i];
     }
     bus->SetDebugOutput( true );
     if( result==2 )
         printf( "ERROR: 0x%X <- LIS3DH::Init() WhoAmI, expected 0x33\n", (int)whoAmI );
     
     // Set Axis
-    bus->ToggleSingle( m_addr, LIS3DH_REG_CTRL_REG1, LIS3DH_AXIS_XYZ, LIS3DH_AXIS_BITMASK );
+    bus->ToggleSingle( m_address.address, LIS3DH_REG_CTRL_REG1, LIS3DH_AXIS_XYZ, LIS3DH_AXIS_BITMASK );
 
     // Set Data Rate
-    if( LIS3DH_SAMPLES_PER_SECOND == 200 ) // Set corresponding LIS3DH_DATARATE_200HZ ...
-    {
-        bus->ToggleSingle( m_addr, LIS3DH_REG_CTRL_REG1, LIS3DH_DATARATE_200HZ, LIS3DH_DATARATE_BITMASK );
-    }
+    if( m_params.sensorHWSamplesPerSec == 100 ) // Set corresponding LIS3DH_DATARATE_100HZ ...
+        bus->ToggleSingle( m_address.address, LIS3DH_REG_CTRL_REG1, LIS3DH_DATARATE_100HZ, LIS3DH_DATARATE_BITMASK );
+    else if( m_params.sensorHWSamplesPerSec == 200 ) // Set corresponding LIS3DH_DATARATE_200HZ ...
+        bus->ToggleSingle( m_address.address, LIS3DH_REG_CTRL_REG1, LIS3DH_DATARATE_200HZ, LIS3DH_DATARATE_BITMASK );
+    else if( m_params.sensorHWSamplesPerSec == 400 ) // Set corresponding LIS3DH_DATARATE_400HZ ...
+        bus->ToggleSingle( m_address.address, LIS3DH_REG_CTRL_REG1, LIS3DH_DATARATE_400HZ, LIS3DH_DATARATE_BITMASK );
+    else if( m_params.sensorHWSamplesPerSec == 1344 ) // Set corresponding LIS3DH_DATARATE_1344HZ ...
+        bus->ToggleSingle( m_address.address, LIS3DH_REG_CTRL_REG1, LIS3DH_DATARATE_1344HZ, LIS3DH_DATARATE_BITMASK );
 
     // Enable Data Ready 1 signal
-    bus->ToggleSingle( m_addr, LIS3DH_REG_CTRL_REG3, LIS3DH_DRDY1_ENABLE, LIS3DH_DRDY1_BITMASK );
+    bus->ToggleSingle( m_address.address, LIS3DH_REG_CTRL_REG3, LIS3DH_DRDY1_ENABLE, LIS3DH_DRDY1_BITMASK );
 
     // Enable Int1 Tap interrupt, we won't use interrupt functionality though
-    bus->ToggleSingle( m_addr, LIS3DH_REG_CTRL_REG3, LIS3DH_INT1TAP_ENABLE, LIS3DH_INT1TAP_BITMASK );
+    bus->ToggleSingle( m_address.address, LIS3DH_REG_CTRL_REG3, LIS3DH_INT1TAP_ENABLE, LIS3DH_INT1TAP_BITMASK );
 
     // Enable High Resolution
-    bus->ToggleSingle( m_addr, LIS3DH_REG_CTRL_REG4, LIS3DH_HIGHRES_ENABLE, LIS3DH_HIGHRES_BITMASK );
+    bus->ToggleSingle( m_address.address, LIS3DH_REG_CTRL_REG4, LIS3DH_HIGHRES_ENABLE, LIS3DH_HIGHRES_BITMASK );
 
     // Enable Block Data Update
-    bus->ToggleSingle( m_addr, LIS3DH_REG_CTRL_REG4, LIS3DH_BDU_ENABLE, LIS3DH_BDU_BITMASK );
+    bus->ToggleSingle( m_address.address, LIS3DH_REG_CTRL_REG4, LIS3DH_BDU_ENABLE, LIS3DH_BDU_BITMASK );
 
     // Set Accel Range (sensitivity)
-    bus->ToggleSingle( m_addr, LIS3DH_REG_CTRL_REG4, LIS3DH_ACCELRANGE_2G, LIS3DH_ACCELRANGE_BITMASK );
+    if( m_params.sensorHWAccelRange==2 )
+        bus->ToggleSingle( m_address.address, LIS3DH_REG_CTRL_REG4, LIS3DH_ACCELRANGE_2G, LIS3DH_ACCELRANGE_BITMASK );
+    else if( m_params.sensorHWAccelRange==4 )
+        bus->ToggleSingle( m_address.address, LIS3DH_REG_CTRL_REG4, LIS3DH_ACCELRANGE_4G, LIS3DH_ACCELRANGE_BITMASK );
+    else if( m_params.sensorHWAccelRange==8 )
+        bus->ToggleSingle( m_address.address, LIS3DH_REG_CTRL_REG4, LIS3DH_ACCELRANGE_8G, LIS3DH_ACCELRANGE_BITMASK );
+    else if( m_params.sensorHWAccelRange==16 )
+        bus->ToggleSingle( m_address.address, LIS3DH_REG_CTRL_REG4, LIS3DH_ACCELRANGE_16G, LIS3DH_ACCELRANGE_BITMASK );
 
     // Enable Int1 Latching for interrupt, we won't use interrupt functionality though
-    bus->ToggleSingle( m_addr, LIS3DH_REG_CTRL_REG5, LIS3DH_INT1LATCH_ENABLE, LIS3DH_INT1LATCH_BITMASK);
+    bus->ToggleSingle( m_address.address, LIS3DH_REG_CTRL_REG5, LIS3DH_INT1LATCH_ENABLE, LIS3DH_INT1LATCH_BITMASK);
 
     // Enable Analog-to-Digital converter (ADC)
-    bus->ToggleSingle( m_addr, LIS3DH_REG_TEMP_CFG_REG, LIS3DH_ADC_ENABLE, LIS3DH_ADC_BITMASK);
+    bus->ToggleSingle( m_address.address, LIS3DH_REG_TEMP_CFG_REG, LIS3DH_ADC_ENABLE, LIS3DH_ADC_BITMASK);
 
     // Enable Single-Tap detection
-    bus->ToggleSingle( m_addr, LIS3DH_REG_CLICK_CFG, LIS3DH_SINGLETAP_XYZ, LIS3DH_SINGLETAP_BITMASK );
+    bus->ToggleSingle( m_address.address, LIS3DH_REG_CLICK_CFG, LIS3DH_SINGLETAP_XYZ, LIS3DH_SINGLETAP_BITMASK );
 
     // Set the Single-Tap timing and sensitivity params
-    bus->WriteSingle( m_addr, LIS3DH_REG_CLICK_THS,    m_params.tapThresh );
-    bus->WriteSingle( m_addr, LIS3DH_REG_TIME_LIMIT,   m_params.tapTimeLimit );
-    bus->WriteSingle( m_addr, LIS3DH_REG_TIME_LATENCY, m_params.tapTimeLatency );
-    bus->WriteSingle( m_addr, LIS3DH_REG_TIME_WINDOW,  m_params.tapTimeWindow );
+    bus->WriteSingle( m_address.address, LIS3DH_REG_CLICK_THS,    m_params.sensorHWTapThresh );
+    bus->WriteSingle( m_address.address, LIS3DH_REG_TIME_LIMIT,   m_params.sensorHWTapTimeLimit );
+    bus->WriteSingle( m_address.address, LIS3DH_REG_TIME_LATENCY, m_params.sensorHWTapTimeLatency );
+    bus->WriteSingle( m_address.address, LIS3DH_REG_TIME_WINDOW,  m_params.sensorHWTapTimeWindow );
 
     // Enable First-In-First-Out (FIFO) buffering
-    bus->ToggleSingle( m_addr, LIS3DH_REG_CTRL_REG5, LIS3DH_FIFO_ENABLE, LIS3DH_FIFO_BITMASK );
-    bus->ToggleSingle( m_addr, LIS3DH_REG_FIFO_CTRL_REG, LIS3DH_FIFO_MODE_STREAM, LIS3DH_FIFO_MODE_BITMASK );
+    bus->ToggleSingle( m_address.address, LIS3DH_REG_CTRL_REG5, LIS3DH_FIFO_ENABLE, LIS3DH_FIFO_BITMASK );
+    bus->ToggleSingle( m_address.address, LIS3DH_REG_FIFO_CTRL_REG, LIS3DH_FIFO_MODE_STREAM, LIS3DH_FIFO_MODE_BITMASK );
 
     // Toggle the mux off
-    bus->WriteGlobal( m_params.muxAddress, 0 );
+    bus->WriteGlobal( m_address.muxAddress, 0 );
 
     printf( "DominoFX: Initialized LIS3DH motion sensor at index %i addres %X, %s ... \n",
-        m_params.index, m_addr, (result==0?"ok":"failed") );
+        m_address.index, m_address.address, (result==0?"ok":"failed") );
 
     return result;
 }
 
-
 int LIS3DH::Sample( I2CBus* bus )
 {
-    int result = 0;
-    int err = 0;
+    bus->SetDebugOutput( m_context.GetDebugDiagStream() );
+    
+    int result = 0, err = 0;
 
     // Toggle the mux to the correct device
-    err = bus->WriteGlobal( m_params.muxAddress, m_params.muxField );
+    err = bus->WriteGlobal( m_address.muxAddress, m_address.muxField );
     if( err!=0 ) result |= 2; // bit 2 for mux error
     
     // Read number of data samples available
     uint8_t count = 0;
-    //if( aux & 0x08 ) // ensure new data is available before reading count
-    //{
-        // TODO: Why is this returning an I2C error very frequently?
-        err = bus->ReadSingle( m_addr, LIS3DH_REG_FIFO_SRC_REG, &count );
-        if( err!=0 ) result |= 1; // bit 1 for sensor error
-        count = count & LIS3DH_FIFO_SAMPLES_BITMASK;
-    //}
+    //if( aux & 0x08 ) ... // would ensure new data is available before reading count
+    
+    // TODO: Why is this returning an I2C error very frequently?
+    err = bus->ReadSingle( m_address.address, LIS3DH_REG_FIFO_SRC_REG, (uint8_t*)&count );
+    if( err!=0 ) result |= 1; // bit 1 for sensor error
+    count = count & LIS3DH_FIFO_SAMPLES_BITMASK;
 
     // Read samples if any are available
     if( count>0 )
     {
-        if( count>5 )
-        {
-            // Optimization; if too many samples waiting in the fifo buffer
-            // don't try to fetch them all right now, otherwise chain reaction
-            // putting us further and further behind schedule with other sensors.
-            // Instead, only fetch enough for the main thread to use right now,
-            // catch up on next iteration.
-            count = 5;
-        }
-
         // Fetch data sample from our bank
         m_sampleIndex = (m_sampleIndex+1) % SAMPLE_COUNT;
 
@@ -339,43 +352,70 @@ int LIS3DH::Sample( I2CBus* bus )
         std::lock_guard<std::mutex> lock(m_mutex);
 
         SensorSample& sample = m_samples[m_sampleIndex];
+        sample.avail = count;
+        
+        // Optimization; if too many samples waiting in the fifo buffer
+        // don't try to fetch them all right now, otherwise chain reaction
+        // putting us further and further behind schedule with other sensors.
+        // Instead, only fetch enough for the main thread to use right now,
+        // catch up on next iteration.
+        if( count > m_sampleQueue )
+            count = m_sampleQueue;
+
         sample.count = count;
 
         // Add 0x80 to register address to enable auto-increment during read
         uint8_t reg = LIS3DH_REG_OUT_X_L | 0x80;
-        err = bus->ReadMulti( m_addr, reg, 6*sample.count, (uint8_t*)(sample.accel) );
+        
+        err = bus->ReadMulti( m_address.address, reg, 6*sample.count, (uint8_t*)(sample.accel) );
         if( err!=0 ) result |= 1; // bit 1 for sensor error
 
         // Read tap status bits
-        err = bus->ReadSingle( m_addr, LIS3DH_REG_CLICK_SRC, &sample.tap );
+        err = bus->ReadSingle( m_address.address, LIS3DH_REG_CLICK_SRC, (uint8_t*)&sample.tap );
         if( err!=0 ) result |= 1; // bit 1 for sensor error
+
+        m_readCount += 1;
+        m_sampleCount += count;
     }
 
     // Toggle the mux off
-    err = bus->WriteGlobal( m_params.muxAddress, 0x00 );
+    err = bus->WriteGlobal( m_address.muxAddress, 0x00 );
     if( err!=0 ) result |= 2; // bit 2 for mux error
 
     if( count>0 )
     {
         SensorSample& sample = m_samples[m_sampleIndex];
         sample.err |= result;
+        //if( sample.count!=count )
+        //    printf("wonky count value\n");
+        if( (result!=0) && (m_context.GetDebugDiagStream()) )
+            printf("^^^ LIS3DH::Sample() [%X : %X] \n", m_address.muxAddress, m_address.muxField );
     }
-    else if( result!=0 )
+    else
     {
-        // TODO: This case triggers frequently, why?
-        printf("i2c_err_noSensorData %i, channel 0x%X:0x%X ", result, (int)(m_params.muxAddress), (int)(m_params.muxField) );
+        if( (result!=0) && (m_context.GetDebugDiagStream()) )
+            printf("i2c_err_mux %i, channel 0x%X:0x%X ", result, (int)(m_address.muxAddress), (int)(m_address.muxField) );
+        //else printf("no_sensor_data %i, channel 0x%X:0x%X ", result, (int)(m_address.muxAddress), (int)(m_address.muxField) );
     }
 
-    //printf( "LIS3DH::Sample() leave critical section\n" );
     return result;
 }
 
 const SensorData* LIS3DH::GetData()
 {
+    //return &m_data;
+    
     // Target latency window of 50ms
     // Determine number of samples in window and average them
-    int accumCount = 0.05*LIS3DH_SAMPLES_PER_SECOND;
-    DVec3_t accelVal;
+//    int accumCount = 1;
+    int accumCount = ceilf(m_params.sensorHWSamplesPerSec / (float)m_params.continuousFPS);
+//printf("continuousFPS %f, accumCount %i\n",(float)(m_params.continuousFPS),(int)accumCount);
+
+    DVec3_t accumAccel;
+    //double  accumAngle = 0;
+    double accumWeight = 0.0;
+    double weight = 1.0;
+    double weightScale = (1.0 - m_params.sensorFilterAmountL1);
     uint8_t tap = 0;
     uint8_t err = 0;
 
@@ -396,36 +436,43 @@ const SensorData* LIS3DH::GetData()
             }
             else
             {
-                sampleIndex = (sampleIndex-1) % 31;
+                sampleIndex = (sampleIndex==0? (SAMPLE_COUNT-1) : (sampleIndex-1)); // non-negative modulo
                 accumRemain = accumRemain - sample.count;
             }
         }
 
-        // Sum values within the time window
+        // Sum values within the time window        
         for( int accumRemain = accumCount; accumRemain>0; )
         {
             while( bufIndex >= m_samples[sampleIndex].count )
             {
-                sampleIndex = (sampleIndex+1) % 31;
+                sampleIndex = (sampleIndex+1) % SAMPLE_COUNT;
                 bufIndex = 0;
             }
-            accelVal += m_samples[sampleIndex].accel[bufIndex];
-            tap |= m_samples[sampleIndex].tap;
-            err |= m_samples[sampleIndex].err;
-            m_samples[sampleIndex].tap = 0; // clear bits, avoid processing same tap twice
-            m_samples[sampleIndex].err = 0; // clear bits, avoid processing same err twice
+            SensorSample& sample = m_samples[sampleIndex];
+            DVec3_t accel( sample.accel[bufIndex] );
+            accel *= weight;
+            accumWeight += weight;
+            weight *= weightScale;
+            //if( axis==Axis::Z )
+            //    accumAngle = atan2( accel.x, accel.y );
+            accumAccel += accel;
+            tap |= sample.tap;
+            err |= sample.err;
+            sample.tap = 0; // clear bits, avoid processing same tap twice
+            sample.err = 0; // clear bits, avoid processing same err twice
             bufIndex++;
             accumRemain--;
         }
     } // Critical section end
 
-    // Divide by number of samples for averaged value
-    accelVal /= accumCount;
+    // Divide by total weight for weighted averaged value
+    accumAccel /= accumWeight;
     // Divide by range for final averaged normalized value
-    accelVal /= 32768.0;
+    accumAccel /= 32768.0;
 
     // Set acceleration value
-    m_data.acceleration = accelVal;
+    m_data.acceleration = accumAccel;
 
     // Set tap flags
     m_data.tap.x = (tap & LIS3DH_TAP_DETECTX?  1 : 0);
@@ -437,9 +484,9 @@ const SensorData* LIS3DH::GetData()
     return &m_data;
 }
 
-const SensorParams* LIS3DH::GetParams()
+const SensorAddress* LIS3DH::GetAddress()
 {
-    return &m_params;
+    return &m_address;
 }
 
 #define MINMAXSUM( val, min, max, sum ) \
@@ -449,7 +496,12 @@ void LIS3DH::DebugPrint()
 {
     // Lock, only one thread may have access
     std::lock_guard<std::mutex> lock(m_mutex);
+
+    TimePoint now = std::chrono::system_clock::now();
+    Duration elapsedPrint = now - m_lastPrint;        
+
     int minQueue=32767, maxQueue=-32768, sumQueue=0;
+    int minAvail=32767, maxAvail=-32768, sumAvail=0;
     int minX=32767,maxX=-32768,sumX=0;
     int minY=32767,maxY=-32768,sumY=0;
     int minZ=32767,maxZ=-32768,sumZ=0;
@@ -458,18 +510,48 @@ void LIS3DH::DebugPrint()
     {
         SensorSample& sample = m_samples[sampleIndex];
         MINMAXSUM( sample.count, minQueue, maxQueue, sumQueue );
+        MINMAXSUM( sample.avail, minAvail, maxAvail, sumAvail );
         for( int bufIndex=0; bufIndex<sample.count; bufIndex++ )
         {
             WVec3_t& v = sample.accel[bufIndex];
+            //printf( "  LIS3DH - Sample %i.%i = [%i,%i,%i]\n",
+            //    sampleIndex, bufIndex, v.x, v.y, v.z );
             MINMAXSUM( v.x, minX, maxX, sumX );
             MINMAXSUM( v.y, minY, maxY, sumY );
-            MINMAXSUM( v.x, minZ, maxZ, sumZ );
+            MINMAXSUM( v.z, minZ, maxZ, sumZ );
         }
     }
-    printf( "  LIS3DH - Mux 0x%X, Slot 0x%X\n", m_params.muxAddress, m_params.muxField );
+    WVec3_t newest = m_samples[m_sampleIndex].accel[0];
+    
+    //printf( "  LIS3DH - Mux 0x%X, Slot 0x%X, this 0x%X\n", m_address.muxAddress, m_address.muxField, (int)this );
+    //printf( "  Read count %i\n", (int)m_readCount );
     printf( "  Queue avg:\t\t %f min:max [%i:%i]\n", (float)(sumQueue/(float)SAMPLE_COUNT), (int)minQueue, (int)maxQueue );
+    printf( "  Avail avg:\t\t %f min:max [%i:%i]\n", (float)(sumAvail/(float)SAMPLE_COUNT), (int)minAvail, (int)maxAvail );
+    printf( "  Accel cur:\t\t (%i,%i,%i)\n", (int)newest.x, (int)newest.y, (int)newest.z );
     printf( "  Accel avg:\t\t (%.1f,%.1f,%.1f) delta (%i,%i,%i)\n",
-        (float)(sumX/(float)sumQueue), (float)(sumY/(float)sumQueue), (float)(sumZ/(float)sumQueue),
-        (int)(maxX-minX), (int)(maxY-minY), (int)(maxZ-minZ) );
+        (float)(sumX/(float)sumQueue), (float)(sumY/(float)sumQueue), (float)(sumZ/(float)sumQueue) );
+    
+    //printf( "  Accel avg:\t\t (%.1f,%.1f,%.1f) delta (%i,%i,%i)\n",
+    //    (float)(sumX/(float)sumQueue), (float)(sumY/(float)sumQueue), (float)(sumZ/(float)sumQueue),
+    //    (int)(maxX-minX), (int)(maxY-minY), (int)(maxZ-minZ) );
+    
+    //printf( "---------- ----------\n" );
+    int readCount = m_readCount - m_lastReadCount;
+    printf("  Reads per second:\t %.3f\n", (float)(readCount/elapsedPrint.count()) );
+    //printf( "---------- ----------\n" );
+    int sampleCount = m_sampleCount - m_lastSampleCount;
+    printf("  Samples per second:\t %.3f\n", (float)(sampleCount/elapsedPrint.count()) );
+
+    m_lastPrint = std::chrono::system_clock::now();
+    m_lastReadCount = m_readCount;
+    m_lastSampleCount = m_sampleCount;
 }
 
+//[ /domino,
+//  0.010683200322092, 0.123046875, -0.0011820531217381,
+//  0.01171875, 0.12186482548714, -0.001953125,
+//  0, 0.11874737590551 -0.001953125,
+// -0.00390625, 0.1171875, -0.00390625
+// 0.013671875, 0.119140625, 0.00390625, -0.00390625, 0.1217360496521, 0, 0.001953125, 0.11641642451286, -0.0015752997715026, 0.032663375139236, 0.111328125,
+// -0.0024928753264248, 0, 0.11795857548714, -0.00077107187826186
+// 1.1962749560598e+22, 5.7987830888065e+22, 6.7120162658453e+22/ /

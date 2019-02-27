@@ -19,7 +19,7 @@ using namespace std;
 #define NB_INTERFACES 2
 
 
-//#define DEBUG_DMX_USB
+// #define DEBUG_DMX_USB
 
 typedef unsigned char byte;
 

@@ -38,6 +38,7 @@
 #define INCLUDED_OSCPACK_UDPSOCKET_H
 
 #include <cstring> // size_t
+#include <netinet/in.h> // for sockaddr_in
 
 #include "NetworkingUtils.h"
 #include "IpEndpointName.h"
@@ -138,6 +139,16 @@ class UdpTransmitSocket : public UdpSocket{
 public:
 	UdpTransmitSocket( const IpEndpointName& remoteEndpoint )
 		{ Connect( remoteEndpoint ); }
+};
+
+class UdpBroadcastSocket : public UdpSocket{
+public:
+    IpEndpointName remoteEndpoint;
+	UdpBroadcastSocket( unsigned long port ) :
+      remoteEndpoint( INADDR_BROADCAST, port )
+		{ SetEnableBroadcast(true); }
+    void Send( const char *data, std::size_t size )
+		{ SendTo( remoteEndpoint, data, size ); }
 };
 
 

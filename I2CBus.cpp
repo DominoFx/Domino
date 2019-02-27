@@ -96,6 +96,7 @@ int I2CBus::Init( const char* busDeviceName )
 // Not working.  Seems to always return true
 int I2CBus::IsPresent( uint8_t deviceID )
 {
+    //int check = ioctl( file, I2C_SLAVE, deviceID   ); // transmit I2C device address
     int check = ioctl( file, I2C_SLAVE_FORCE, deviceID   ); // transmit I2C device address
 
     if( check == 0 ) return 1;
@@ -117,6 +118,7 @@ int I2CBus::ReadGlobal( uint8_t deviceID, uint8_t* globalVal )
     cmd.size       = I2C_SMBUS_BYTE;
     cmd.data       = &data;
 
+    //if( ioctl( file, I2C_SLAVE, deviceID   ) != 0)  // transmit I2C device address
     if( ioctl( file, I2C_SLAVE_FORCE, deviceID   ) != 0)  // transmit I2C device address
         result |= 0x01; // error code
     if( ioctl( file, I2C_SMBUS, &cmd ) != 0 ) // transmit I2C register ID and value
@@ -125,8 +127,7 @@ int I2CBus::ReadGlobal( uint8_t deviceID, uint8_t* globalVal )
     (*globalVal) = data.byte;
 
     if( (result!=0) && debugOutput )
-        printf("i2c_err_1 ");
-        //printf( "ERROR: %i <- I2CBus::WriteGlobal( 0x%X, 0x%X )\n",
+        printf("i2c_err_1 "); //printf( "ERROR: %i <- I2CBus::WriteGlobal( 0x%X, 0x%X )\n",
         //    result, (int)deviceID, (int)(*globalVal) );
     
     return result;
@@ -145,14 +146,14 @@ int I2CBus::WriteGlobal( uint8_t deviceID, uint8_t globalVal )
     cmd.size       = I2C_SMBUS_BYTE;
     cmd.data       = &data;
 
-    if( ioctl( file, I2C_SLAVE_FORCE, deviceID   ) != 0)  // transmit I2C device address
+    //if( ioctl( file, I2C_SLAVE, deviceID   ) != 0)  // transmit I2C device address
+    if( ioctl( file, I2C_SLAVE_FORCE, deviceID ) != 0)  // transmit I2C device address
         result |= 0x01; // error code
     if( ioctl( file, I2C_SMBUS, &cmd ) != 0 ) // transmit I2C register ID and value
         result |= 0x02; // error code
 
     if( (result!=0) && debugOutput )
-        printf("i2c_err_2 ");
-        //printf( "ERROR: %i <- I2CBus::WriteGlobal( 0x%X, 0x%X )\n",
+        printf("i2c_err_2 ");//printf( "ERROR: %i <- I2CBus::WriteGlobal( 0x%X, 0x%X )\n",
         //    result, (int)deviceID, (int)globalVal );
     
     return result;
@@ -170,6 +171,7 @@ int I2CBus::ReadSingle( uint8_t deviceID, uint8_t regID, uint8_t* regVal )
     cmd.size       = I2C_SMBUS_BYTE_DATA;
     cmd.data       = &data;
 
+    //if( ioctl( file, I2C_SLAVE, deviceID   ) != 0)  // transmit I2C device address
     if( ioctl( file, I2C_SLAVE_FORCE, deviceID   ) != 0)  // transmit I2C device address
         result |= 0x01; // error code
     if( ioctl( file, I2C_SMBUS, &cmd ) != 0 ) // transmit I2C register ID and value
@@ -177,6 +179,11 @@ int I2CBus::ReadSingle( uint8_t deviceID, uint8_t regID, uint8_t* regVal )
 
    (*regVal) = data.byte;
     
+
+//    if( result!=0 )
+//        printf( "ERROR: %i <- I2CBus::ReadSingle( 0x%X, 0x%X, 0x%X )\n",
+//            result, (int)deviceID, (int)regID, (int)(*regVal) );
+
     return result;
 }
 
@@ -199,8 +206,7 @@ int I2CBus::WriteSingle( uint8_t deviceID, uint8_t regID, uint8_t regVal )
         result |= 0x02; // error code
 
     if( (result!=0) && debugOutput )
-        printf("i2c_err_3 ");
-        //printf( "ERROR: %i <- I2CBus::WriteSingle( 0x%X, 0x%X, 0x%X )\n",
+        printf("i2c_err_3 "); //printf( "ERROR: %i <- I2CBus::WriteSingle( 0x%X, 0x%X, 0x%X )\n",
         //    result, (int)deviceID, (int)regID, (int)regVal );
     
     return result;
@@ -219,6 +225,7 @@ int I2CBus::ToggleSingle( uint8_t deviceID, uint8_t regID, uint8_t regVal, uint8
     cmd.size       = I2C_SMBUS_BYTE_DATA;
     cmd.data       = &data;
 
+    //if( ioctl( file, I2C_SLAVE, deviceID   ) != 0)  // transmit I2C device address
     if( ioctl( file, I2C_SLAVE_FORCE, deviceID   ) != 0)  // transmit I2C device address
         result |= 0x01; // error code
     if( ioctl( file, I2C_SMBUS, &cmd ) != 0 ) // transmit I2C register ID and value
@@ -227,14 +234,14 @@ int I2CBus::ToggleSingle( uint8_t deviceID, uint8_t regID, uint8_t regVal, uint8
     data.byte = (data.byte & ~bitmask) | regVal;
     cmd.read_write = I2C_SMBUS_WRITE;
 
+    //if( ioctl( file, I2C_SLAVE, deviceID   ) != 0)  // transmit I2C device address
     if( ioctl( file, I2C_SLAVE_FORCE, deviceID   ) != 0)  // transmit I2C device address
         result |= 0x04; // error code
     if( ioctl( file, I2C_SMBUS, &cmd ) != 0 ) // transmit I2C register ID and value
         result |= 0x08; // error code
 
     if( (result!=0) && debugOutput )
-        printf("i2c_err_4 ");
-        //printf( "ERROR: %i <- I2CBus::ToggleSingle( 0x%X, 0x%X, 0x%X, 0x%X )\n",
+        printf("i2c_err_4 "); //printf( "ERROR: %i <- I2CBus::ToggleSingle( 0x%X, 0x%X, 0x%X, 0x%X )\n",
         //    result, (int)deviceID, (int)regID, (int)regVal, (int)bitmask );
     
     return result;
@@ -263,8 +270,7 @@ int I2CBus::ReadMulti( uint8_t deviceID, uint8_t regID, uint8_t regCount, uint8_
         result |= 0x01; // error code
 
     if( (result!=0) && debugOutput )
-        printf("i2c_err_5 ");
-        //printf( "ERROR: %i <- I2CBus::ReadMulti( 0x%X, 0x%X, %i, regBuf[0] )\n",
+        printf("i2c_err_5 "); //printf( "ERROR: %i <- I2CBus::ReadMulti( 0x%X, 0x%X, %i, regBuf[0] )\n",
         //    result, (int)deviceID, (int)regID, (int)regCount, (int)regBuf[0] );
 
     return result;

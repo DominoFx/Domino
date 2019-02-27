@@ -1,0 +1,10 @@
+{
+    "name":"VOICE STATION - ID 5",
+    "id":45,  
+    "baselineValueDMX" : 30, 
+    "sequence":
+    [
+        { "fade":"00s 350", "sustain":"00s 000", "dmx":[ {"*":90} ] },
+        { "fade":"01s 400", "sustain":"00s 000", "dmx":[] }
+    ]
+}

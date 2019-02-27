@@ -194,9 +194,11 @@ public:
 
 	void Send( const char *data, std::size_t size )
 	{
+        printf("UdpSocket::Send() data=%s, size=%i, isConnected_=%i -> \n", (const char*)data, (int)size, (int)isConnected );
 		assert( isConnected_ );
 
         send( socket_, data, (int)size, 0 );
+        printf("UdpSocket::Send() <- \n" );
 	}
 
     void SendTo( const IpEndpointName& remoteEndpoint, const char *data, std::size_t size )
@@ -445,9 +447,11 @@ public:
                             : 0 );
             }
 
+            //printf("SocketReceiveMultiplexer::Run() waiting for packet -> \n");
 			DWORD waitResult = WaitForMultipleObjects( (DWORD)socketListeners_.size() + 1, &events[0], FALSE, waitTime );
 			if( break_ )
 				break;
+            //printf("SocketReceiveMultiplexer::Run() received packet... \n");
 
 			if( waitResult != WAIT_TIMEOUT ){
 				for( int i = waitResult - WAIT_OBJECT_0; i < (int)socketListeners_.size(); ++i ){
@@ -475,6 +479,7 @@ public:
 			}
 			if( resort )
 				std::sort( timerQueue_.begin(), timerQueue_.end(), CompareScheduledTimerCalls );
+            //printf("SocketReceiveMultiplexer::Run() waiting for packet <- \n");
 		}
 
 		delete [] data;
